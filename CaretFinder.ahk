@@ -1,4 +1,5 @@
 ;==============================================================================
+;  BTH 11/Nov/26 I asked Claude to write this based on cursor_finding_nov26.rtf
 ;  CaretFinder.ahk  -  "Find My Mouse", but for the TEXT cursor (caret)
 ;==============================================================================
 ;
@@ -70,10 +71,12 @@ OutlineColour     := "000000"   ; Thin contrasting edge around the ring (helps o
 OutlineWidth      := 3          ; Pixels of outline on each side of the ring. 0 = none.
 RingThickness     := 8          ; Thickness of the coloured ring, in pixels.
 RingRadius        := 45         ; Final radius of the ring around the cursor, pixels.
-StartRadius       := 160        ; Ring starts this big and shrinks to RingRadius.
+StartRadius       := 320        ; Ring starts this big and shrinks to RingRadius.
                                 ;   Set equal to RingRadius for no shrinking.
 ShrinkTime        := 300        ; Milliseconds the shrinking takes.
-DisplayTime       := 800        ; Milliseconds the ring stays fully visible.
+StayUntilKeyPress := true       ; true  = ring stays until you press any key, then fades.
+                                ; false = ring fades by itself after DisplayTime.
+DisplayTime       := 800        ; Milliseconds the ring stays (only if StayUntilKeyPress is false).
 FadeTime          := 500        ; Milliseconds the fade-out takes. 0 = vanish instantly.
 RingOpacity       := 240        ; 0 (invisible) to 255 (solid).
 
@@ -138,6 +141,9 @@ IsShiftVK(vk) => (vk = 0x10 || vk = 0xA0 || vk = 0xA1)
 
 WatchKeyDown(ih, vk, sc) {
     global gTapLast, gShiftDownAt, gTapSpoiled
+    ; Any key press starts the fade of a ring that is waiting for one.
+    if (IsObject(gAnim) && !gAnim.fadeStart && A_TickCount - gAnim.start >= 150)
+        gAnim.fadeStart := A_TickCount
     if IsShiftVK(vk) {
         if !gShiftDownAt {                ; ignore key auto-repeat
             gShiftDownAt := A_TickCount
@@ -570,7 +576,7 @@ ShowRingAt(cx, cy) {
     global gAnim
     if !gRings.Length
         CreateRingWindows()
-    gAnim := {cx: cx, cy: cy, start: A_TickCount, lastR: -1}
+    gAnim := {cx: cx, cy: cy, start: A_TickCount, lastR: -1, fadeStart: 0}
     RingFrame()
     SetTimer(RingFrame, 15)
 }
@@ -587,8 +593,11 @@ RingFrame() {
         p := t / ShrinkTime
         p := 1 - (1 - p) ** 3                    ; ease-out
         r := StartRadius + (RingRadius - StartRadius) * p
-    } else if (t >= ShrinkTime + DisplayTime) {
-        f := (t - ShrinkTime - DisplayTime) / Max(FadeTime, 1)
+    }
+    ; When does the fade begin? At a key press, or after DisplayTime.
+    fadeAt := StayUntilKeyPress ? gAnim.fadeStart : gAnim.start + ShrinkTime + DisplayTime
+    if (fadeAt && A_TickCount >= fadeAt) {
+        f := (A_TickCount - fadeAt) / Max(FadeTime, 1)
         if (f >= 1) {
             HideRing()
             return
