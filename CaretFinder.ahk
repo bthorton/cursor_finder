@@ -7,7 +7,8 @@
 ;    Double-tap either Shift key and a ring appears around the text cursor in
 ;    the document you are typing in. It starts large, shrinks onto the cursor
 ;    (movement is easy to catch with peripheral vision), stays briefly, then
-;    fades away. If no text cursor can be found you hear a short low beep.
+;    fades when you press a key. If no text cursor can be found you hear the
+;    Windows "Exclamation" sound (changeable in SETTINGS).
 ;
 ;    The ring is click-through, never takes focus and never blocks typing:
 ;    you can carry on typing while it is on screen.
@@ -83,8 +84,12 @@ RingOpacity       := 240        ; 0 (invisible) to 255 (solid).
 DoubleTapTime     := 400        ; Max milliseconds between the two Shift taps.
 MaxTapHold        := 350        ; A Shift press held longer than this isn't a "tap".
 
-BeepFrequency     := 300        ; Beep when no cursor found: pitch in Hz ...
-BeepDuration      := 150        ; ... and length in milliseconds.
+NotFoundSound     := A_WinDir "\Media\Windows Exclamation.wav"
+                                ; Sound played when no cursor is found. Any .wav file
+                                ;   works, e.g. A_WinDir "\Media\Windows Ding.wav".
+                                ;   Set to "" to use the simple beep below instead.
+BeepFrequency     := 800        ; Simple beep (used if the sound file is missing or ""):
+BeepDuration      := 200        ;   pitch in Hz and length in milliseconds.
 
 SkipStandardMethodFor := []     ; Program files to skip methods 1-2 for, e.g.
                                 ;   ["soffice.bin", "firefox.exe"]
@@ -190,7 +195,7 @@ ShowCaretRing() {
     method := ""
     r := FindCaret(&method)
     if !r {
-        SoundBeep(BeepFrequency, BeepDuration)
+        NotFoundAlert()
         if ShowMethodTooltip
             ShowTip("Caret Finder: no text cursor found")
         return
@@ -199,6 +204,18 @@ ShowCaretRing() {
     ShowRingAt(cx, cy)
     if ShowMethodTooltip
         ShowTip("Caret found via: " method, cx - 60, cy + RingRadius + 15)
+}
+
+NotFoundAlert() {
+    ; A .wav plays through the normal speakers at normal volume; the simple
+    ; beep is a fallback because it can be hard to hear on some speakers.
+    if (NotFoundSound != "" && FileExist(NotFoundSound)) {
+        try {
+            SoundPlay(NotFoundSound)
+            return
+        }
+    }
+    SoundBeep(BeepFrequency, BeepDuration)
 }
 
 ShowTip(text, x?, y?) {
