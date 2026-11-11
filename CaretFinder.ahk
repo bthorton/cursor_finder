@@ -41,7 +41,12 @@
 ;    2. Press Windows+R, type   shell:startup   and press Enter.
 ;       Your personal Startup folder opens.
 ;    3. Move the shortcut you just made into that folder.
-;       Do NOT tick "Run as administrator" in the shortcut's properties.
+;    4. Recommended: right-click the shortcut > Properties, and change Target
+;       so it names AutoHotkey itself, followed by the script in quotes, e.g.
+;         "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe" "C:\...\CaretFinder.ahk"
+;       Then it doesn't depend on which program Windows opens .ahk files with
+;       (an editor install can change that).
+;       Do NOT tick "Run as administrator" (Shortcut tab > Advanced).
 ;    It will now start automatically each time you sign in to Windows.
 ;    (To stop that, delete the shortcut from the Startup folder.)
 ;
@@ -116,6 +121,8 @@ ShowMethodTooltip := false      ; true = show which method found the cursor.
 
 AllowRunAsAdmin   := false      ; false = if started as administrator, ask whether to
                                 ;   carry on and close if you say No. Leave false.
+AppResponseTimeout := 1000      ; Milliseconds to wait for a program to answer before
+                                ;   giving up (so a frozen program can't freeze this).
 ;============================ END OF SETTINGS =================================
 
 ; Replace any missing / out-of-range settings with safe values (tells you if so).
@@ -315,6 +322,9 @@ FindCaret(&method) {
         return 0
     exe := ""
     try exe := WinGetProcessName(hActive)
+    ; Don't query a program that is frozen: accessibility calls to it could hang.
+    if !IsResponsive(hActive)
+        return 0
     gti := GuiThreadInfo(hActive)
     hFocus := (gti && gti.focus) ? gti.focus : hActive
 
@@ -400,14 +410,42 @@ CaretFromMSAACaret(hwnd) {
 CaretFromUIA() {
     static uia := 0
     if !uia
-        uia := ComObject("{FF48DBA4-60EF-4201-AA87-54103EEF594E}"   ; CUIAutomation
-                       , "{30CBE57D-D9D0-452A-AB13-7AC5AC4825EE}")  ; IUIAutomation
+        uia := CreateUIAutomation()
     pEl := 0
     if (ComCall(8, uia, "ptr*", &pEl, "int") < 0 || !pEl)   ; GetFocusedElement
         return 0
     el := ComValue(13, pEl)
     range := UIACaretRange(el)
     return range ? UIARangeToCaret(range) : 0
+}
+
+; Creates the UI Automation client with short timeouts, and with automatic
+; focus-setting switched off so pattern calls can never move your focus.
+CreateUIAutomation() {
+    static IID_IUIAutomation  := "{30CBE57D-D9D0-452A-AB13-7AC5AC4825EE}"
+    static IID_IUIAutomation2 := "{34723AFF-0C9D-49D0-9896-7AB52DF8CD8A}"
+    uia := 0
+    try uia := ComObject("{E22AD333-B25F-460C-83D0-0581107395C9}", IID_IUIAutomation)  ; CUIAutomation8
+    if !uia
+        uia := ComObject("{FF48DBA4-60EF-4201-AA87-54103EEF594E}", IID_IUIAutomation)  ; CUIAutomation
+    try {
+        uia2 := ComObjQuery(uia, IID_IUIAutomation2)                 ; Windows 8 and later
+        ComCall(59, uia2, "int", 0, "int")                         ; put_AutoSetFocus(FALSE)
+        ComCall(61, uia2, "uint", AppResponseTimeout, "int")       ; put_ConnectionTimeout
+        ComCall(63, uia2, "uint", AppResponseTimeout, "int")       ; put_TransactionTimeout
+    }
+    return uia
+}
+
+; True if the window's program answers a harmless message within the timeout.
+IsResponsive(hwnd) {
+    if !IsWindowHandle(hwnd)
+        return false
+    if DllCall("IsHungAppWindow", "ptr", hwnd)
+        return false
+    result := 0                                ; WM_NULL, SMTO_ABORTIFHUNG
+    return DllCall("SendMessageTimeout", "ptr", hwnd, "uint", 0, "ptr", 0, "ptr", 0
+                 , "uint", 0x2, "uint", AppResponseTimeout, "ptr*", &result, "ptr") != 0
 }
 
 UIACaretRange(el) {
@@ -830,6 +868,7 @@ ValidateSettings() {
          , StartRadius, ShrinkTime, StayUntilKeyPress, DisplayTime, FadeTime
          , RingOpacity, DoubleTapTime, MaxTapHold, NotFoundSound, BeepFrequency
          , BeepDuration, SkipStandardMethodFor, ShowMethodTooltip, AllowRunAsAdmin
+         , AppResponseTimeout
     fixes := []
     RingColour        := CheckColour(RingColour, "FF00FF", "RingColour", fixes)
     OutlineColour     := CheckColour(OutlineColour, "000000", "OutlineColour", fixes)
@@ -848,6 +887,7 @@ ValidateSettings() {
     StayUntilKeyPress := CheckBool(StayUntilKeyPress, true, "StayUntilKeyPress", fixes)
     ShowMethodTooltip := CheckBool(ShowMethodTooltip, false, "ShowMethodTooltip", fixes)
     AllowRunAsAdmin   := CheckBool(AllowRunAsAdmin, false, "AllowRunAsAdmin", fixes)
+    AppResponseTimeout := CheckNumber(AppResponseTimeout, 200, 10000, 1000, "AppResponseTimeout", fixes)
     if (RingThickness >= RingRadius) {
         RingThickness := Max(1, RingRadius // 4)
         fixes.Push("RingThickness must be smaller than RingRadius; using " RingThickness)
