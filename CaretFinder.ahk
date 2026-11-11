@@ -595,6 +595,13 @@ SearchIA2Caret(acc, depth, &budget) {
     return 0
 }
 
+; IAccessibleText vtable slots, from the official IDL (IAccessible2 project,
+; api/AccessibleText.idl). IAccessibleText derives from IUnknown, so 0-2 are
+; QueryInterface/AddRef/Release and its own methods start at 3:
+;   3 addSelection   4 get_attributes   5 get_caretOffset   6 get_characterExtents
+;   7 get_nSelections   8 get_offsetAtPoint   9 get_selection   10 get_text ...
+; Checked live against Firefox: slot 10 returns page text and slot 6 returns
+; character boxes inside their text objects, so slots 5 and 6 are correct.
 IA2CaretRect(acc) {
     text := IA2Text(acc)
     if !text
