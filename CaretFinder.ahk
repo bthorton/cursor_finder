@@ -118,6 +118,9 @@ AllowRunAsAdmin   := false      ; false = if started as administrator, ask wheth
                                 ;   carry on and close if you say No. Leave false.
 ;============================ END OF SETTINGS =================================
 
+; Replace any missing / out-of-range settings with safe values (tells you if so).
+ValidateSettings()
+
 ; Safety check: this script is designed to run as a normal user only.
 if (A_IsAdmin && !AllowRunAsAdmin) {
     answer := MsgBox("Caret Finder has been started as administrator.`n`n"
@@ -131,7 +134,9 @@ if (A_IsAdmin && !AllowRunAsAdmin) {
 
 ; Work in real screen pixels so the ring lines up on high-DPI / mixed monitors.
 try DllCall("SetThreadDpiAwarenessContext", "ptr", -4, "ptr")
-DllCall("LoadLibrary", "str", "oleacc.dll", "ptr")
+; oleacc provides the MSAA / IAccessible2 methods. If it can't load, those
+; methods simply fail (each call is guarded) and the others still work.
+global gHaveOleacc := DllCall("LoadLibrary", "str", "oleacc.dll", "ptr") != 0
 CoordMode("Mouse", "Screen")
 CoordMode("ToolTip", "Screen")
 
@@ -154,8 +159,15 @@ if ShowMethodTooltip
     A_TrayMenu.Check("Show which method found the cursor")
 
 ; Remember which accessible object last got keyboard focus (helps LibreOffice).
-DllCall("SetWinEventHook", "uint", 0x8005, "uint", 0x8005, "ptr", 0
-      , "ptr", CallbackCreate(OnFocusEvent, , 7), "uint", 0, "uint", 0, "uint", 0, "ptr")
+; If the hook can't be set, IAccessible2 still works via its second route.
+global gFocusCallback := CallbackCreate(OnFocusEvent, , 7)
+global gFocusHook := DllCall("SetWinEventHook", "uint", 0x8005, "uint", 0x8005, "ptr", 0
+      , "ptr", gFocusCallback, "uint", 0, "uint", 0, "uint", 0, "ptr")
+if !gFocusHook {
+    CallbackFree(gFocusCallback)
+    gFocusCallback := 0
+}
+OnExit(CleanUp)
 
 StartKeyWatcher()
 return
@@ -233,7 +245,10 @@ ShowCaretRing() {
         return
     }
     cx := r.x + r.w / 2, cy := r.y + r.h / 2
-    ShowRingAt(cx, cy)
+    if !ShowRingAt(cx, cy) {
+        NotFoundAlert()                    ; couldn't draw: tell the user anyway
+        return
+    }
     if ShowMethodTooltip
         ShowTip("Caret found via: " method, cx - 60, cy + RingRadius + 15)
 }
@@ -256,9 +271,33 @@ ShowTip(text, x?, y?) {
 }
 
 TestRing() {
-    MouseGetPos(&x, &y)
-    ShowRingAt(x, y)
+    x := "", y := ""
+    try MouseGetPos(&x, &y)
+    if !ShowRingAt(x, y)
+        NotFoundAlert()
 }
+
+CleanUp(*) {
+    if gFocusHook
+        DllCall("UnhookWinEvent", "ptr", gFocusHook)
+    if gFocusCallback
+        CallbackFree(gFocusCallback)
+}
+
+; A screen coordinate that is a real number of sensible size (rejects text,
+; NaN, infinity and absurd values from misbehaving apps).
+IsSaneCoord(v) => IsNumber(v) && v > -100000 && v < 100000
+
+IsRect(r) {
+    if !IsObject(r)
+        return false
+    for k in ["x", "y", "w", "h"]
+        if (!r.HasOwnProp(k) || !IsSaneCoord(r.%k%))
+            return false
+    return r.w >= 0 && r.h >= 0
+}
+
+IsWindowHandle(hwnd) => IsInteger(hwnd) && hwnd != 0 && DllCall("IsWindow", "ptr", hwnd)
 
 ToggleMethodTip(itemName, *) {
     global ShowMethodTooltip := !ShowMethodTooltip
@@ -305,7 +344,7 @@ FindCaret(&method) {
 
 ; Reject empty / off-window results (e.g. a stale hidden caret).
 Plausible(r, hActive) {
-    if (!IsObject(r) || r.h <= 0 || r.h > 600)
+    if (!IsRect(r) || r.h <= 0 || r.h > 600)
         return false
     if (r.x = 0 && r.y = 0)
         return false
@@ -321,7 +360,11 @@ Plausible(r, hActive) {
 
 ;---------- 1. Standard method: GetGUIThreadInfo -------------------------------
 GuiThreadInfo(hwnd) {
+    if !IsWindowHandle(hwnd)
+        return 0
     tid := DllCall("GetWindowThreadProcessId", "ptr", hwnd, "ptr", 0, "uint")
+    if !tid
+        return 0
     gti := Buffer(8 + 6 * A_PtrSize + 16, 0)
     NumPut("uint", gti.Size, gti, 0)
     if !DllCall("GetGUIThreadInfo", "uint", tid, "ptr", gti)
@@ -334,11 +377,12 @@ GuiThreadInfo(hwnd) {
 }
 
 CaretFromGTI(gti) {
-    if (!gti || !gti.caretHwnd || gti.b <= gti.t)
+    if (!gti || !IsWindowHandle(gti.caretHwnd) || gti.b <= gti.t || gti.r < gti.l)
         return 0
     pt := Buffer(8)
     NumPut("int", gti.l, "int", gti.t, pt)
-    DllCall("ClientToScreen", "ptr", gti.caretHwnd, "ptr", pt)
+    if !DllCall("ClientToScreen", "ptr", gti.caretHwnd, "ptr", pt)
+        return 0
     return {x: NumGet(pt, 0, "int"), y: NumGet(pt, 4, "int")
           , w: Max(gti.r - gti.l, 0), h: gti.b - gti.t}
 }
@@ -359,8 +403,7 @@ CaretFromUIA() {
         uia := ComObject("{FF48DBA4-60EF-4201-AA87-54103EEF594E}"   ; CUIAutomation
                        , "{30CBE57D-D9D0-452A-AB13-7AC5AC4825EE}")  ; IUIAutomation
     pEl := 0
-    ComCall(8, uia, "ptr*", &pEl)                ; GetFocusedElement
-    if !pEl
+    if (ComCall(8, uia, "ptr*", &pEl, "int") < 0 || !pEl)   ; GetFocusedElement
         return 0
     el := ComValue(13, pEl)
     range := UIACaretRange(el)
@@ -410,41 +453,70 @@ UIARangeToCaret(range) {
     if (r := UIARangeBox(range))
         return {x: r.x, y: r.y, w: 0, h: r.h}
     ; Empty range has no box: measure the character after the caret ...
-    pC := 0
-    ComCall(3, range, "ptr*", &pC)                          ; Clone
-    c := ComValue(13, pC)
-    ComCall(6, c, "int", 0)                                 ; ExpandToEnclosingUnit(Character)
-    if (r := UIARangeBox(c))
-        return {x: r.x, y: r.y, w: 0, h: r.h}
+    if (c := UIACloneRange(range)) {
+        if (ComCall(6, c, "int", 0, "int") >= 0       ; ExpandToEnclosingUnit(Character)
+            && (r := UIARangeBox(c)))
+            return {x: r.x, y: r.y, w: 0, h: r.h}
+    }
     ; ... or the character before it (caret at end of line/document)
-    pC := 0
-    ComCall(3, range, "ptr*", &pC)
-    c := ComValue(13, pC)
-    moved := 0
-    ComCall(14, c, "int", 0, "int", 0, "int", -1, "int*", &moved)  ; MoveEndpointByUnit(Start, Character, -1)
-    if (moved && (r := UIARangeBox(c)))
-        return {x: r.x + r.w, y: r.y, w: 0, h: r.h}
+    if (c := UIACloneRange(range)) {
+        moved := 0                                    ; MoveEndpointByUnit(Start, Character, -1)
+        if (ComCall(14, c, "int", 0, "int", 0, "int", -1, "int*", &moved, "int") >= 0
+            && moved != 0 && (r := UIARangeBox(c)))
+            return {x: r.x + r.w, y: r.y, w: 0, h: r.h}
+    }
     return 0
+}
+
+UIACloneRange(range) {
+    pC := 0
+    if (ComCall(3, range, "ptr*", &pC, "int") < 0 || !pC)  ; Clone
+        return 0
+    return ComValue(13, pC)
 }
 
 UIARangeBox(range) {
     psa := 0
-    ComCall(10, range, "ptr*", &psa)                        ; GetBoundingRectangles
-    if !psa
+    if (ComCall(10, range, "ptr*", &psa, "int") < 0 || !psa)  ; GetBoundingRectangles
         return 0
-    box := 0, ub := -1
-    DllCall("oleaut32\SafeArrayGetUBound", "ptr", psa, "uint", 1, "int*", &ub)
-    if (ub >= 3) {                                          ; at least one rect (4 doubles)
-        pData := 0
-        DllCall("oleaut32\SafeArrayAccessData", "ptr", psa, "ptr*", &pData)
-        x := NumGet(pData, 0, "double"),  y := NumGet(pData, 8, "double")
-        w := NumGet(pData, 16, "double"), h := NumGet(pData, 24, "double")
-        DllCall("oleaut32\SafeArrayUnaccessData", "ptr", psa)
-        if (h > 0)
-            box := {x: Round(x), y: Round(y), w: Round(w), h: Round(h)}
-    }
+    box := 0
+    try box := ReadFirstRectFromSafeArray(psa)
     DllCall("oleaut32\SafeArrayDestroy", "ptr", psa)
     return box
+}
+
+; The array should be 1-D doubles: left, top, width, height, (left, top, ...).
+; Every step is checked before any memory is read.
+ReadFirstRectFromSafeArray(psa) {
+    if (DllCall("oleaut32\SafeArrayGetDim", "ptr", psa, "uint") != 1)
+        return 0
+    vt := 0
+    if (DllCall("oleaut32\SafeArrayGetVartype", "ptr", psa, "ushort*", &vt, "int") != 0
+        || vt != 5)                                       ; VT_R8 (double)
+        return 0
+    if (DllCall("oleaut32\SafeArrayGetElemsize", "ptr", psa, "uint") != 8)
+        return 0
+    lb := 0, ub := -1
+    if (DllCall("oleaut32\SafeArrayGetLBound", "ptr", psa, "uint", 1, "int*", &lb, "int") != 0
+        || DllCall("oleaut32\SafeArrayGetUBound", "ptr", psa, "uint", 1, "int*", &ub, "int") != 0)
+        return 0
+    if (ub - lb + 1 < 4)                                  ; need one whole rectangle
+        return 0
+    pData := 0
+    if (DllCall("oleaut32\SafeArrayAccessData", "ptr", psa, "ptr*", &pData, "int") != 0)
+        return 0
+    try {
+        if !pData
+            return 0
+        x := NumGet(pData, 0, "double"),  y := NumGet(pData, 8, "double")
+        w := NumGet(pData, 16, "double"), h := NumGet(pData, 24, "double")
+    } finally {
+        DllCall("oleaut32\SafeArrayUnaccessData", "ptr", psa)
+    }
+    if (!IsSaneCoord(x) || !IsSaneCoord(y) || !IsSaneCoord(w) || !IsSaneCoord(h)
+        || w < 0 || h <= 0)
+        return 0
+    return {x: Round(x), y: Round(y), w: Round(w), h: Round(h)}
 }
 
 ;---------- 4. IAccessible2 (LibreOffice, Firefox) -----------------------------
@@ -455,7 +527,7 @@ OnFocusEvent(hHook, event, hwnd, idObject, idChild, idThread, eventTime) {
 CaretFromIA2(hFocus, hActive) {
     ; a) The object that most recently received keyboard focus
     f := gLastFocus
-    if (f.hwnd && DllCall("GetAncestor", "ptr", f.hwnd, "uint", 2, "ptr") = hActive) {
+    if (IsWindowHandle(f.hwnd) && DllCall("GetAncestor", "ptr", f.hwnd, "uint", 2, "ptr") = hActive) {
         acc := AccFromEvent(f)
         if (acc && (r := IA2CaretRect(acc)))
             return r
@@ -516,9 +588,10 @@ IA2CharBox(text, off) {
     x := 0, y := 0, w := 0, h := 0
     ; get_characterExtents(offset, IA2_COORDTYPE_SCREEN_RELATIVE, ...)
     if (ComCall(6, text, "int", off, "int", 0, "int*", &x, "int*", &y
-                , "int*", &w, "int*", &h, "int") != 0 || h <= 0)
+                , "int*", &w, "int*", &h, "int") != 0)
         return 0
-    return {x: x, y: y, w: w, h: h}
+    r := {x: x, y: y, w: w, h: h}
+    return (IsRect(r) && h > 0) ? r : 0
 }
 
 ;---------- MSAA helpers -------------------------------------------------------
@@ -530,6 +603,8 @@ GuidBuf(str) {
 
 AccFromWindow(hwnd, objId) {
     static iid := GuidBuf("{618736E0-3C3D-11CF-810C-00AA00389B71}")
+    if (!gHaveOleacc || !IsWindowHandle(hwnd))
+        return 0
     p := 0
     if (DllCall("oleacc\AccessibleObjectFromWindow", "ptr", hwnd, "uint", objId
               , "ptr", iid, "ptr*", &p) != 0 || !p)
@@ -538,11 +613,31 @@ AccFromWindow(hwnd, objId) {
 }
 
 AccFromEvent(f) {
+    if (!gHaveOleacc || !IsWindowHandle(f.hwnd))
+        return 0
     p := 0, v := Buffer(A_PtrSize = 8 ? 24 : 16, 0)
-    if (DllCall("oleacc\AccessibleObjectFromEvent", "ptr", f.hwnd, "uint", f.id
-              , "uint", f.child, "ptr*", &p, "ptr", v) != 0 || !p)
+    hr := DllCall("oleacc\AccessibleObjectFromEvent", "ptr", f.hwnd, "uint", f.id
+                , "uint", f.child, "ptr*", &p, "ptr", v)
+    DllCall("oleaut32\VariantClear", "ptr", v)   ; free whatever came back in varChild
+    if (hr != 0 || !p)
         return 0
     return ComValue(13, p)
+}
+
+; Reads one VARIANT from a buffer we own. Returns an IAccessible wrapper if it
+; holds an object, otherwise frees it and returns 0.
+AccFromVariant(buf, offset) {
+    vt := NumGet(buf, offset, "ushort")
+    if (vt = 9 || vt = 13) {                     ; VT_DISPATCH / VT_UNKNOWN
+        p := NumGet(buf, offset + 8, "ptr")
+        if !p
+            return 0
+        wrapped := ComValue(13, p)               ; takes ownership, releases later
+        try return ComObjQuery(wrapped, IID_IAccessible)
+        return 0
+    }
+    DllCall("oleaut32\VariantClear", "ptr", buf.Ptr + offset)
+    return 0                                     ; a child ID, or empty
 }
 
 AccLocation(acc, childId := 0) {
@@ -555,7 +650,10 @@ AccLocation(acc, childId := 0) {
         hr := ComCall(22, acc, "int*", &x, "int*", &y, "int*", &w, "int*", &h
                     , "int64", 3, "int64", childId, "int")
     }
-    return (hr = 0) ? {x: x, y: y, w: w, h: h} : 0
+    if (hr != 0)
+        return 0
+    r := {x: x, y: y, w: w, h: h}
+    return IsRect(r) ? r : 0
 }
 
 FocusedAccessible(hwnd) {
@@ -576,18 +674,16 @@ AccFocusedChild(acc) {
     v := Buffer(A_PtrSize = 8 ? 24 : 16, 0)
     if (ComCall(18, acc, "ptr", v, "int") != 0)  ; get_accFocus
         return 0
-    vt := NumGet(v, 0, "ushort")
-    if ((vt = 9 || vt = 13) && (p := NumGet(v, 8, "ptr"))) {
-        wrapped := ComValue(13, p)
-        try return ComObjQuery(wrapped, IID_IAccessible)
-    }
-    return 0                                     ; itself, a simple child, or nothing
+    return AccFromVariant(v, 0)                  ; 0 = itself, a simple child, or nothing
 }
 
 AccChildren(acc, maxCount := 300) {
     out := [], n := 0
-    try ComCall(8, acc, "int*", &n)              ; get_accChildCount
-    if (n <= 0)
+    if !gHaveOleacc
+        return out
+    hr := -1
+    try hr := ComCall(8, acc, "int*", &n, "int") ; get_accChildCount
+    if (hr != 0 || !IsInteger(n) || n <= 0)
         return out
     n := Min(n, maxCount)
     vsz := A_PtrSize = 8 ? 24 : 16
@@ -595,13 +691,10 @@ AccChildren(acc, maxCount := 300) {
     if (DllCall("oleacc\AccessibleChildren", "ptr", acc, "int", 0, "int", n
               , "ptr", buf, "int*", &got) < 0)
         return out
+    got := Max(0, Min(got, n))                   ; never read past our buffer
     loop got {
-        off := (A_Index - 1) * vsz
-        vt := NumGet(buf, off, "ushort")
-        if ((vt = 9 || vt = 13) && (p := NumGet(buf, off + 8, "ptr"))) {
-            wrapped := ComValue(13, p)           ; takes ownership, releases later
-            try out.Push(ComObjQuery(wrapped, IID_IAccessible))
-        }
+        if (child := AccFromVariant(buf, (A_Index - 1) * vsz))
+            out.Push(child)
     }
     return out
 }
@@ -613,21 +706,36 @@ AccChildren(acc, maxCount := 300) {
 CreateRingWindows() {
     ; E0x80000 layered, E0x20 click-through, E0x08000000 never activate
     opts := "+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x80000 +E0x20 +E0x08000000"
-    if (OutlineWidth > 0) {
-        g := Gui(opts), g.BackColor := OutlineColour
-        gRings.Push({gui: g, extra: OutlineWidth})
+    rings := []
+    try {
+        if (OutlineWidth > 0) {
+            g := Gui(opts), g.BackColor := OutlineColour
+            rings.Push({gui: g, extra: OutlineWidth})
+        }
+        g := Gui(opts), g.BackColor := RingColour   ; created last = drawn on top
+        rings.Push({gui: g, extra: 0})
+    } catch {
+        for ring in rings
+            try ring.gui.Destroy()
+        return false
     }
-    g := Gui(opts), g.BackColor := RingColour   ; created last = drawn on top
-    gRings.Push({gui: g, extra: 0})
+    for ring in rings
+        gRings.Push(ring)
+    return true
 }
 
 ShowRingAt(cx, cy) {
     global gAnim
-    if !gRings.Length
-        CreateRingWindows()
+    if (!IsSaneCoord(cx) || !IsSaneCoord(cy))
+        return false
+    if (!gRings.Length && !CreateRingWindows())
+        return false
     gAnim := {cx: cx, cy: cy, start: A_TickCount, lastR: -1, fadeStart: 0}
     RingFrame()
+    if !gAnim                                   ; first frame failed and hid the ring
+        return false
     SetTimer(RingFrame, 15)
+    return true
 }
 
 RingFrame() {
@@ -653,33 +761,142 @@ RingFrame() {
         }
         a := RingOpacity * (1 - f)
     }
-    r := Round(r), a := Round(a)
+    r := Round(r)
+    a := Max(0, Min(255, Round(a)))             ; alpha must fit in a byte
     for ring in gRings {
-        DllCall("SetLayeredWindowAttributes", "ptr", ring.gui.Hwnd, "uint", 0, "uchar", a, "uint", 2)
-        if (r != gAnim.lastR)
-            ShapeRing(ring.gui.Hwnd, gAnim.cx, gAnim.cy, r + ring.extra, RingThickness + 2 * ring.extra)
+        hwnd := ring.gui.Hwnd
+        if !DllCall("SetLayeredWindowAttributes", "ptr", hwnd, "uint", 0, "uchar", a, "uint", 2) {
+            HideRing()                          ; can't control it: don't leave it stuck
+            return
+        }
+        if (r != gAnim.lastR
+            && !ShapeRing(hwnd, gAnim.cx, gAnim.cy, r + ring.extra, RingThickness + 2 * ring.extra)) {
+            HideRing()
+            return
+        }
     }
     gAnim.lastR := r
 }
 
+; Cuts the window into a ring shape and places it centred on (cx, cy).
+; Returns true on success; on failure frees anything it created.
 ShapeRing(hwnd, cx, cy, radius, thick) {
+    radius := Round(radius), thick := Round(thick)
+    if (!IsWindowHandle(hwnd) || !IsSaneCoord(cx) || !IsSaneCoord(cy))
+        return false
+    if (radius < 1 || radius > 5000 || thick < 1)
+        return false
     d := 2 * radius
     outer := DllCall("CreateEllipticRgn", "int", 0, "int", 0, "int", d + 1, "int", d + 1, "ptr")
-    if (thick * 2 < d) {
+    if !outer
+        return false
+    if (thick * 2 < d) {                        ; otherwise draw a solid disc
         inner := DllCall("CreateEllipticRgn", "int", thick, "int", thick
                        , "int", d - thick + 1, "int", d - thick + 1, "ptr")
-        DllCall("CombineRgn", "ptr", outer, "ptr", outer, "ptr", inner, "int", 4)  ; RGN_DIFF
+        if !inner {
+            DllCall("DeleteObject", "ptr", outer)
+            return false
+        }
+        res := DllCall("CombineRgn", "ptr", outer, "ptr", outer, "ptr", inner, "int", 4)  ; RGN_DIFF
         DllCall("DeleteObject", "ptr", inner)
+        if (res <= 1) {                         ; ERROR (0) or NULLREGION (1)
+            DllCall("DeleteObject", "ptr", outer)
+            return false
+        }
     }
-    DllCall("SetWindowRgn", "ptr", hwnd, "ptr", outer, "int", 1)   ; Windows now owns region
+    if !DllCall("SetWindowRgn", "ptr", hwnd, "ptr", outer, "int", 1) {
+        DllCall("DeleteObject", "ptr", outer)   ; still ours if Windows refused it
+        return false
+    }
+    ; (Windows now owns the region and frees it.)
     ; HWND_TOPMOST, SWP_NOACTIVATE | SWP_SHOWWINDOW
-    DllCall("SetWindowPos", "ptr", hwnd, "ptr", -1, "int", Round(cx - radius)
-          , "int", Round(cy - radius), "int", d, "int", d, "uint", 0x50)
+    return DllCall("SetWindowPos", "ptr", hwnd, "ptr", -1, "int", Round(cx - radius)
+                 , "int", Round(cy - radius), "int", d, "int", d, "uint", 0x50) != 0
 }
 
 HideRing() {
     global gAnim := 0
     SetTimer(RingFrame, 0)
     for ring in gRings
-        ring.gui.Hide()
+        try ring.gui.Hide()
+}
+
+
+;==============================================================================
+;  Settings validation
+;==============================================================================
+ValidateSettings() {
+    global RingColour, OutlineColour, OutlineWidth, RingThickness, RingRadius
+         , StartRadius, ShrinkTime, StayUntilKeyPress, DisplayTime, FadeTime
+         , RingOpacity, DoubleTapTime, MaxTapHold, NotFoundSound, BeepFrequency
+         , BeepDuration, SkipStandardMethodFor, ShowMethodTooltip, AllowRunAsAdmin
+    fixes := []
+    RingColour        := CheckColour(RingColour, "FF00FF", "RingColour", fixes)
+    OutlineColour     := CheckColour(OutlineColour, "000000", "OutlineColour", fixes)
+    OutlineWidth      := CheckNumber(OutlineWidth, 0, 50, 3, "OutlineWidth", fixes)
+    RingThickness     := CheckNumber(RingThickness, 1, 200, 8, "RingThickness", fixes)
+    RingRadius        := CheckNumber(RingRadius, 5, 1000, 45, "RingRadius", fixes)
+    StartRadius       := CheckNumber(StartRadius, 5, 2000, 320, "StartRadius", fixes)
+    ShrinkTime        := CheckNumber(ShrinkTime, 0, 10000, 300, "ShrinkTime", fixes)
+    DisplayTime       := CheckNumber(DisplayTime, 0, 600000, 800, "DisplayTime", fixes)
+    FadeTime          := CheckNumber(FadeTime, 0, 10000, 500, "FadeTime", fixes)
+    RingOpacity       := CheckNumber(RingOpacity, 1, 255, 240, "RingOpacity", fixes)
+    DoubleTapTime     := CheckNumber(DoubleTapTime, 100, 2000, 400, "DoubleTapTime", fixes)
+    MaxTapHold        := CheckNumber(MaxTapHold, 50, 2000, 350, "MaxTapHold", fixes)
+    BeepFrequency     := CheckNumber(BeepFrequency, 37, 32767, 800, "BeepFrequency", fixes)
+    BeepDuration      := CheckNumber(BeepDuration, 10, 5000, 200, "BeepDuration", fixes)
+    StayUntilKeyPress := CheckBool(StayUntilKeyPress, true, "StayUntilKeyPress", fixes)
+    ShowMethodTooltip := CheckBool(ShowMethodTooltip, false, "ShowMethodTooltip", fixes)
+    AllowRunAsAdmin   := CheckBool(AllowRunAsAdmin, false, "AllowRunAsAdmin", fixes)
+    if (RingThickness >= RingRadius) {
+        RingThickness := Max(1, RingRadius // 4)
+        fixes.Push("RingThickness must be smaller than RingRadius; using " RingThickness)
+    }
+    if !(NotFoundSound is String) {
+        NotFoundSound := ""
+        fixes.Push("NotFoundSound must be a file name in quotes; using the simple beep")
+    }
+    if !(SkipStandardMethodFor is Array) {
+        SkipStandardMethodFor := []
+        fixes.Push('SkipStandardMethodFor must be a list like ["soffice.bin"]; using []')
+    }
+    if fixes.Length {
+        msg := "Some settings in CaretFinder.ahk were not valid, so safe values are being used:`n`n"
+        for f in fixes
+            msg .= "  - " f "`n"
+        MsgBox(msg, "Caret Finder", "Icon! T60")
+    }
+}
+
+ShowValue(v) => IsObject(v) ? "(a list or object)" : '"' v '"'
+
+CheckNumber(v, lo, hi, default, name, fixes) {
+    if (IsObject(v) || !IsNumber(v)) {
+        fixes.Push(name " = " ShowValue(v) " is not a number; using " default)
+        return default
+    }
+    n := Round(v)
+    if (n < lo || n > hi) {
+        c := Max(lo, Min(hi, n))
+        fixes.Push(name " = " n " must be " lo " to " hi "; using " c)
+        return c
+    }
+    return n
+}
+
+CheckColour(v, default, name, fixes) {
+    if (v is String) {
+        s := LTrim(Trim(v), "#")
+        if RegExMatch(s, "^[0-9A-Fa-f]{6}$")
+            return s
+    }
+    fixes.Push(name " = " ShowValue(v) " is not a colour like `"FF00FF`"; using " default)
+    return default
+}
+
+CheckBool(v, default, name, fixes) {
+    if (v = true || v = false) && !IsObject(v)
+        return !!v
+    fixes.Push(name " = " ShowValue(v) " must be true or false; using " (default ? "true" : "false"))
+    return default
 }
