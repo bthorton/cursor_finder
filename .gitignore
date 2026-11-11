@@ -1,3 +1,6 @@
 # LibreOffice / Office lock files
 .~lock.*#
 ~$*
+
+# Personal notes - keep out of the public repo
+cursor_finding_nov26.rtf
