@@ -13,9 +13,24 @@
 ;    The ring is click-through, never takes focus and never blocks typing:
 ;    you can carry on typing while it is on screen.
 ;
-;  HOW TO INSTALL
-;    1. Download AutoHotkey **version 2** from https://www.autohotkey.com
-;       ("Download v2.0") and run the installer with the default options.
+;  SECURITY / PERMISSIONS
+;    * This script needs NO administrator rights, to install or to run.
+;      It runs as your normal user account and should always be started
+;      normally (double-click, or the Startup shortcut below).
+;    * It never asks Windows for administrator rights itself. If it finds it
+;      has been started as administrator anyway, it asks whether to carry on
+;      and closes if you say No (see AllowRunAsAdmin in SETTINGS).
+;    * It only reads the text cursor position. It does not record, store or
+;      send what you type, and it makes no network connections.
+;
+;  HOW TO INSTALL (no administrator rights needed)
+;    1. Get AutoHotkey **version 2** from https://www.autohotkey.com
+;       ("Download v2.0"). Either:
+;         - run the installer and, if it offers a choice, install for the
+;           "Current user" only (this does not need administrator rights), or
+;         - download the .zip version instead, unzip it into a folder of
+;           your own, and open CaretFinder.ahk with AutoHotkey64.exe from it.
+;           This needs no installation at all.
 ;    2. Put this file (CaretFinder.ahk) anywhere you like, e.g. Documents.
 ;    3. Double-click CaretFinder.ahk. A green "H" icon appears in the
 ;       system tray (bottom-right, by the clock). It is now running.
@@ -26,6 +41,7 @@
 ;    2. Press Windows+R, type   shell:startup   and press Enter.
 ;       Your personal Startup folder opens.
 ;    3. Move the shortcut you just made into that folder.
+;       Do NOT tick "Run as administrator" in the shortcut's properties.
 ;    It will now start automatically each time you sign in to Windows.
 ;    (To stop that, delete the shortcut from the Startup folder.)
 ;
@@ -56,8 +72,11 @@
 ;    * LibreOffice: if it beeps, check Tools > Options > LibreOffice >
 ;      Accessibility and tick "Support assistive technology tools" if your
 ;      version shows that option, then restart LibreOffice.
-;    * Programs running "as administrator" can't be read by a normal script.
-;      Run this script as administrator too if you need those.
+;    * Windows doesn't let normal programs read windows that are running "as
+;      administrator", so the ring can't find the cursor in those (you'll
+;      hear the not-found sound). This is a Windows safety feature, so leave
+;      it in place. Ordinary documents, browsers and editors are not affected.
+;      Do not run this script as administrator just to get around it.
 ;==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -94,7 +113,20 @@ BeepDuration      := 200        ;   pitch in Hz and length in milliseconds.
 SkipStandardMethodFor := []     ; Program files to skip methods 1-2 for, e.g.
                                 ;   ["soffice.bin", "firefox.exe"]
 ShowMethodTooltip := false      ; true = show which method found the cursor.
+
+AllowRunAsAdmin   := false      ; false = if started as administrator, ask whether to
+                                ;   carry on and close if you say No. Leave false.
 ;============================ END OF SETTINGS =================================
+
+; Safety check: this script is designed to run as a normal user only.
+if (A_IsAdmin && !AllowRunAsAdmin) {
+    answer := MsgBox("Caret Finder has been started as administrator.`n`n"
+        . "It doesn't need administrator rights and is meant to run normally.`n`n"
+        . "Close it now? (Recommended: Yes, then start it again normally.)"
+        , "Caret Finder", "YesNo Icon! Default1")
+    if (answer = "Yes")
+        ExitApp
+}
 
 
 ; Work in real screen pixels so the ring lines up on high-DPI / mixed monitors.
