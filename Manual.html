@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caret Finder Manual</title>
+<meta name="description" content="How to download, install, configure and use Caret Finder, a tool that circles the text cursor when you double-tap Shift.">
+<style>
+  :root {
+    --bg: #ffffff;
+    --text: #111111;
+    --muted: #3d3d3d;
+    --accent: #8a0f8a;
+    --accent-bg: #fbeefb;
+    --border: #6b6b6b;
+    --code-bg: #f1f1f1;
+    --note-bg: #fff6d6;
+    --note-border: #9a7300;
+    --warn-bg: #ffe9e6;
+    --warn-border: #b3261e;
+    --focus: #0b57d0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111111;
+      --text: #f2f2f2;
+      --muted: #cfcfcf;
+      --accent: #ff8cff;
+      --accent-bg: #2b142b;
+      --border: #a0a0a0;
+      --code-bg: #262626;
+      --note-bg: #2e2810;
+      --note-border: #e0b84a;
+      --warn-bg: #3a1a17;
+      --warn-border: #ff8a80;
+      --focus: #8ab4f8;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111111;
+    --text: #f2f2f2;
+    --muted: #cfcfcf;
+    --accent: #ff8cff;
+    --accent-bg: #2b142b;
+    --border: #a0a0a0;
+    --code-bg: #262626;
+    --note-bg: #2e2810;
+    --note-border: #e0b84a;
+    --warn-bg: #3a1a17;
+    --warn-border: #ff8a80;
+    --focus: #8ab4f8;
+  }
+
+  * { box-sizing: border-box; }
+  html { font-size: 125%; }               /* 20px base: large by default */
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", Verdana, Arial, sans-serif;
+    line-height: 1.6;
+  }
+  main {
+    max-width: 46rem;
+    margin: 0 auto;
+    padding: 1rem 16px 4rem;
+  }
+  h1 { font-size: 2rem; line-height: 1.25; margin: 1rem 0 0.25rem; }
+  h2 {
+    font-size: 1.5rem;
+    margin: 2.75rem 0 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 3px solid var(--accent);
+  }
+  h3 { font-size: 1.2rem; margin: 1.75rem 0 0.5rem; }
+  p, li { max-width: 40em; }
+  li { margin: 0.4rem 0; }
+  a { color: var(--accent); text-underline-offset: 0.15em; }
+  a:focus-visible, summary:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 3px;
+  }
+  .subtitle { font-size: 1.15rem; color: var(--muted); margin-top: 0; }
+
+  .skip {
+    position: absolute; left: -9999px; top: 0;
+    background: var(--accent); color: var(--bg);
+    padding: 0.5rem 1rem; font-weight: bold;
+  }
+  .skip:focus { left: 16px; top: 8px; z-index: 10; }
+
+  nav.toc {
+    background: var(--accent-bg);
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    padding: 0.75rem 1.25rem;
+    margin: 1.5rem 0;
+  }
+  nav.toc h2 { border: 0; margin: 0 0 0.25rem; padding: 0; font-size: 1.2rem; }
+  nav.toc ol { margin: 0; padding-left: 1.5rem; }
+
+  kbd {
+    display: inline-block;
+    font-family: inherit;
+    font-size: 0.95em;
+    font-weight: 600;
+    padding: 0 0.4em;
+    border: 2px solid var(--border);
+    border-bottom-width: 3px;
+    border-radius: 5px;
+    background: var(--code-bg);
+    white-space: nowrap;
+  }
+  code {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.95em;
+    background: var(--code-bg);
+    padding: 0.05em 0.3em;
+    border-radius: 4px;
+    overflow-wrap: anywhere;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    overflow-x: auto;
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
+
+  .note, .warn {
+    border-left: 6px solid var(--note-border);
+    background: var(--note-bg);
+    padding: 0.6rem 1rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .warn { border-left-color: var(--warn-border); background: var(--warn-bg); }
+  .note > :first-child, .warn > :first-child { margin-top: 0; }
+  .note > :last-child, .warn > :last-child { margin-bottom: 0; }
+
+  .table-wrap { overflow-x: auto; margin: 1rem 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+  th, td {
+    border: 1px solid var(--border);
+    padding: 0.45rem 0.6rem;
+    text-align: left;
+    vertical-align: top;
+  }
+  th { background: var(--accent-bg); }
+  td code { white-space: nowrap; }
+  caption { text-align: left; font-weight: bold; padding-bottom: 0.4rem; }
+
+  details {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 1rem;
+    margin: 0.75rem 0;
+  }
+  summary { cursor: pointer; font-weight: 600; padding: 0.2rem 0; }
+
+  @media (max-width: 600px) {
+    html { font-size: 112.5%; }
+    h1 { font-size: 1.7rem; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#content">Skip to the manual</a>
+<main id="content">
+
+<h1>Caret Finder</h1>
+<p class="subtitle">Double-tap <kbd>Shift</kbd> to circle the text cursor, like "Find My Mouse" but for where you're typing.</p>
+
+<nav class="toc" aria-labelledby="toc-heading">
+  <h2 id="toc-heading">Contents</h2>
+  <ol>
+    <li><a href="#what">What it does</a></li>
+    <li><a href="#download">How to download</a></li>
+    <li><a href="#install">How to install (and what you need first)</a></li>
+    <li><a href="#use">How to use it</a></li>
+    <li><a href="#configure">How to configure it</a></li>
+    <li><a href="#tray">System tray options</a></li>
+    <li><a href="#trouble">Troubleshooting</a></li>
+    <li><a href="#privacy">Privacy and security</a></li>
+  </ol>
+</nav>
+
+<!-- ===================================================================== -->
+<h2 id="what">1. What it does</h2>
+<p>When you double-tap either <kbd>Shift</kbd> key, Caret Finder draws a bright ring around the text cursor (the "caret") in the document you're typing in.</p>
+<ul>
+  <li>The ring starts large and shrinks onto the cursor. Movement is easier to catch with side vision.</li>
+  <li>It stays on screen until you press any key, then fades away. That key still types normally.</li>
+  <li>If no text cursor can be found, you hear the Windows "Exclamation" sound.</li>
+  <li>The ring never takes focus and never blocks typing or clicking. You can keep typing while it's showing.</li>
+</ul>
+<p>It has been tested with WordPad, Firefox and VS Code. It's also designed to work with LibreOffice Writer and most other Windows programs.</p>
+
+<!-- ===================================================================== -->
+<h2 id="download">2. How to download</h2>
+<p>Caret Finder is a single file called <code>CaretFinder.ahk</code>. Get it from the project page on GitHub:</p>
+<p><a href="https://github.com/bthorton/cursor_finder">https://github.com/bthorton/cursor_finder</a></p>
+
+<h3>Option A: download everything as a ZIP (easiest)</h3>
+<ol>
+  <li>Open the project page linked above.</li>
+  <li>Click the green <strong>Code</strong> button, then <strong>Download ZIP</strong>.</li>
+  <li>Open your Downloads folder, right-click the ZIP file, and choose <strong>Extract All…</strong>.</li>
+  <li>Move the extracted folder somewhere permanent, for example your Documents folder. Don't leave it in Downloads if you plan to start it automatically.</li>
+</ol>
+
+<h3>Option B: download just the script</h3>
+<ol>
+  <li>On the project page, click <code>CaretFinder.ahk</code>.</li>
+  <li>Click the <strong>Download raw file</strong> button (a downward arrow, near the top right of the file).</li>
+  <li>Move the file to a permanent folder, for example Documents.</li>
+</ol>
+
+<div class="note">
+  <p><strong>If Windows marks the file as downloaded from the internet:</strong> right-click <code>CaretFinder.ahk</code>, choose <strong>Properties</strong>, and if there's an <strong>Unblock</strong> tick box at the bottom, tick it and click <strong>OK</strong>.</p>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="install">3. How to install (and what you need first)</h2>
+
+<h3>What you need</h3>
+<ul>
+  <li><strong>Windows 10 or Windows 11.</strong></li>
+  <li><strong>AutoHotkey version 2.</strong> This free program runs <code>.ahk</code> scripts. Version 1 won't work; the script will tell you if the wrong version tries to run it.</li>
+  <li><strong>Sound turned on</strong>, if you want to hear when no cursor can be found.</li>
+  <li><strong>No administrator rights.</strong> Neither AutoHotkey (installed the ways below) nor Caret Finder needs them.</li>
+</ul>
+
+<h3>Step 1: install AutoHotkey v2</h3>
+<p>Choose <strong>one</strong> of these:</p>
+<details open>
+  <summary>From the AutoHotkey website (recommended)</summary>
+  <ol>
+    <li>Go to <a href="https://www.autohotkey.com">https://www.autohotkey.com</a> and click <strong>Download</strong>, then choose <strong>v2.0</strong>.</li>
+    <li>Run the installer. If it offers a choice, install for the <strong>Current user</strong> only, which doesn't need administrator rights.</li>
+  </ol>
+</details>
+<details>
+  <summary>With winget (Windows' built-in package manager)</summary>
+  <p>Open a terminal (press <kbd>Windows</kbd>, type <em>Terminal</em>, press <kbd>Enter</kbd>) and run:</p>
+  <pre><code>winget install --id AutoHotkey.AutoHotkey --exact</code></pre>
+  <p>This downloads the official installer from the AutoHotkey Foundation.</p>
+</details>
+<details>
+  <summary>Without installing anything (portable ZIP)</summary>
+  <ol>
+    <li>On the AutoHotkey website, download the <strong>.zip</strong> version of v2 instead of the installer.</li>
+    <li>Extract it into a folder of your own.</li>
+    <li>To run Caret Finder, right-click <code>CaretFinder.ahk</code>, choose <strong>Open with</strong>, then <strong>Choose another app</strong>, and pick <code>AutoHotkey64.exe</code> from that folder.</li>
+  </ol>
+</details>
+<div class="note">
+  <p>AutoHotkey isn't officially available in the Microsoft Store. Avoid look-alike apps there.</p>
+</div>
+
+<h3>Step 2: start Caret Finder</h3>
+<ol>
+  <li>Double-click <code>CaretFinder.ahk</code>.</li>
+  <li>No window opens. That's normal. A small green square with a white <strong>H</strong> appears in the system tray, at the bottom right of the screen by the clock. If you can't see it, click the small up-arrow (<strong>^</strong>) next to the clock.</li>
+</ol>
+
+<h3>Step 3 (optional): start it automatically when you sign in</h3>
+<ol>
+  <li>Right-click <code>CaretFinder.ahk</code> and choose <strong>Create shortcut</strong>.</li>
+  <li>Press <kbd>Windows</kbd>+<kbd>R</kbd>, type <code>shell:startup</code> and press <kbd>Enter</kbd>. Your personal Startup folder opens.</li>
+  <li>Move the new shortcut into that folder.</li>
+  <li><strong>Recommended:</strong> right-click the shortcut, choose <strong>Properties</strong>, and set <strong>Target</strong> to name AutoHotkey itself, followed by the script in quotes. For example:
+    <pre><code>"C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe" "C:\Users\YourName\Documents\Cursor_Finder\CaretFinder.ahk"</code></pre>
+    Use the real locations on your PC. This way it keeps working even if another program takes over opening <code>.ahk</code> files.</li>
+</ol>
+<div class="warn">
+  <p><strong>Don't tick "Run as administrator"</strong> on the shortcut (Shortcut tab, then Advanced). Caret Finder is designed to run as a normal user. If it's started as administrator, it will ask whether to close.</p>
+</div>
+<p>To stop it starting automatically, delete the shortcut from the Startup folder, or switch it off in Task Manager's <strong>Startup</strong> tab.</p>
+
+<!-- ===================================================================== -->
+<h2 id="use">4. How to use it</h2>
+<ol>
+  <li>Click into a document, web page form, or anywhere you type, so the text cursor is there.</li>
+  <li><strong>Tap <kbd>Shift</kbd> twice quickly.</strong> Either Shift key works.</li>
+  <li>A ring shrinks onto the text cursor and stays there.</li>
+  <li><strong>Press any key</strong> to make the ring fade away. You can simply carry on typing.</li>
+</ol>
+
+<h3>What counts as a double-tap</h3>
+<ul>
+  <li>Two quick taps, no more than 0.4 seconds apart (adjustable: <code>DoubleTapTime</code>).</li>
+  <li>Each tap must be short; holding <kbd>Shift</kbd> down doesn't count (<code>MaxTapHold</code>).</li>
+  <li>Pressing any other key or clicking the mouse between the taps cancels it. Typing capital letters will never set it off by accident.</li>
+</ul>
+
+<h3>If you hear a sound instead</h3>
+<p>The Windows "Exclamation" sound means no text cursor could be found. For example, all windows are minimised, or you're on the desktop or in a program that doesn't report its cursor. See <a href="#trouble">Troubleshooting</a>.</p>
+
+<!-- ===================================================================== -->
+<h2 id="configure">5. How to configure it</h2>
+
+<h3>Changing a setting</h3>
+<ol>
+  <li>Right-click the green <strong>H</strong> tray icon and choose <strong>Edit Script</strong>. Or open <code>CaretFinder.ahk</code> in Notepad.</li>
+  <li>Find the block marked <code>SETTINGS</code> near the top. Each line looks like this:
+    <pre><code>RingRadius        := 45         ; Final radius of the ring around the cursor, pixels.</code></pre>
+    Change only the value after <code>:=</code>. Text after a semicolon (<code>;</code>) is a comment and is ignored.</li>
+  <li>Save the file.</li>
+  <li>Right-click the tray icon and choose <strong>Reload Script</strong>.</li>
+  <li>Use <strong>Test ring at mouse pointer</strong> from the tray menu to see the result.</li>
+</ol>
+<div class="note">
+  <p><strong>Rules for values:</strong> colours and file names go in double quotes, e.g. <code>"FFFF00"</code>; numbers don't. Comment lines must start with a semicolon <code>;</code>. A colon or anything else stops the script loading.</p>
+  <p>If a value is missing, not a number, or out of range, Caret Finder uses a safe default instead. A message lists what it replaced; it closes itself after a minute.</p>
+</div>
+
+<h3>Appearance</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">Allowed</th><th scope="col">What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>RingColour</code></td><td><code>"FF00FF"</code> (magenta)</td><td>Colour as <code>"RRGGBB"</code></td><td>Colour of the ring. Ideas: <code>"FFFF00"</code> yellow, <code>"00FFFF"</code> cyan, <code>"FF0000"</code> red, <code>"00FF00"</code> green.</td></tr>
+    <tr><td><code>OutlineColour</code></td><td><code>"000000"</code> (black)</td><td>Colour as <code>"RRGGBB"</code></td><td>Thin contrasting edge around the ring, so it shows on any background. <code>"FFFFFF"</code> = white edge.</td></tr>
+    <tr><td><code>OutlineWidth</code></td><td><code>3</code></td><td>0–50 pixels</td><td>Width of that edge on each side. <code>0</code> = no edge.</td></tr>
+    <tr><td><code>RingThickness</code></td><td><code>8</code></td><td>1–200 pixels, less than <code>RingRadius</code></td><td>Thickness of the coloured ring.</td></tr>
+    <tr><td><code>RingRadius</code></td><td><code>45</code></td><td>5–1000 pixels</td><td>Size of the ring once it has settled on the cursor.</td></tr>
+    <tr><td><code>RingOpacity</code></td><td><code>240</code></td><td>1–255</td><td>How solid the ring looks. 255 = fully solid.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Animation and timing</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">Allowed</th><th scope="col">What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>StartRadius</code></td><td><code>320</code></td><td>5–2000 pixels</td><td>The ring starts this big and shrinks to <code>RingRadius</code>. Make it equal to <code>RingRadius</code> for no shrinking.</td></tr>
+    <tr><td><code>ShrinkTime</code></td><td><code>300</code></td><td>0–10000 ms</td><td>How long the shrinking takes, in milliseconds (1000 = 1 second).</td></tr>
+    <tr><td><code>StayUntilKeyPress</code></td><td><code>true</code></td><td><code>true</code> or <code>false</code></td><td><code>true</code>: the ring stays until you press a key. <code>false</code>: it fades by itself after <code>DisplayTime</code>.</td></tr>
+    <tr><td><code>DisplayTime</code></td><td><code>800</code></td><td>0–600000 ms</td><td>How long the ring stays, only used when <code>StayUntilKeyPress</code> is <code>false</code>.</td></tr>
+    <tr><td><code>FadeTime</code></td><td><code>500</code></td><td>0–10000 ms</td><td>How long the fade-out takes. <code>0</code> = vanish instantly.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Double-tap detection</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">Allowed</th><th scope="col">What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>DoubleTapTime</code></td><td><code>400</code></td><td>100–2000 ms</td><td>Longest gap allowed between the two taps. Increase it if double-taps are often missed.</td></tr>
+    <tr><td><code>MaxTapHold</code></td><td><code>350</code></td><td>50–2000 ms</td><td>A Shift press held longer than this isn't counted as a tap.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>"Not found" sound</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">Allowed</th><th scope="col">What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>NotFoundSound</code></td><td>Windows Exclamation</td><td>Path to a <code>.wav</code> file, or <code>""</code></td><td>Sound played when no cursor is found. Windows sounds are in <code>C:\Windows\Media</code>. Example: <code>A_WinDir "\Media\Windows Ding.wav"</code>. Set to <code>""</code> to use the simple beep instead.</td></tr>
+    <tr><td><code>BeepFrequency</code></td><td><code>800</code></td><td>37–32767 Hz</td><td>Pitch of the simple beep, used if the sound file is missing or <code>""</code>.</td></tr>
+    <tr><td><code>BeepDuration</code></td><td><code>200</code></td><td>10–5000 ms</td><td>Length of the simple beep.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Advanced</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">Allowed</th><th scope="col">What it does</th></tr></thead>
+  <tbody>
+    <tr><td><code>SkipStandardMethodFor</code></td><td><code>[]</code></td><td>A list of program files</td><td>If the ring appears in the wrong place in one program, add its file name, e.g. <code>["soffice.bin"]</code> for LibreOffice or <code>["soffice.bin", "firefox.exe"]</code>. Caret Finder then uses the accessibility methods for it instead of the standard Windows caret.</td></tr>
+    <tr><td><code>ShowMethodTooltip</code></td><td><code>false</code></td><td><code>true</code> or <code>false</code></td><td><code>true</code> shows a small note saying how the cursor was found. Useful for troubleshooting. Can also be switched from the tray menu.</td></tr>
+    <tr><td><code>AppResponseTimeout</code></td><td><code>1000</code></td><td>200–10000 ms</td><td>How long to wait for a program to answer before giving up, so a frozen program can't freeze Caret Finder.</td></tr>
+    <tr><td><code>AllowRunAsAdmin</code></td><td><code>false</code></td><td><code>true</code> or <code>false</code></td><td>Leave as <code>false</code>. If Caret Finder is started as administrator, it asks whether to close.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="tray">6. System tray options</h2>
+<p>Right-click the green <strong>H</strong> icon in the system tray (bottom right, by the clock) to open the menu. Hovering over the icon shows "Caret Finder - double-tap Shift to find the text cursor".</p>
+
+<h3>Caret Finder's own options (at the bottom of the menu)</h3>
+<dl>
+  <dt><strong>Test ring at mouse pointer</strong></dt>
+  <dd>Shows the ring around the mouse pointer. Use it to check the ring is working and to try out appearance settings. Press any key to dismiss it.</dd>
+  <dt><strong>Show which method found the cursor</strong></dt>
+  <dd>Ticks on or off. When ticked, a small note appears below the ring after each double-tap, saying how the cursor was found, e.g. "Caret found via: IAccessible2". It lasts until the script is reloaded. To keep it on permanently, set <code>ShowMethodTooltip := true</code> in the settings.</dd>
+</dl>
+
+<h3>Standard AutoHotkey options (at the top of the menu)</h3>
+<div class="table-wrap">
+<table>
+  <thead><tr><th scope="col">Option</th><th scope="col">What it does</th></tr></thead>
+  <tbody>
+    <tr><td><strong>Open</strong></td><td>Opens AutoHotkey's technical information window for the script. Not needed for everyday use.</td></tr>
+    <tr><td><strong>Help</strong></td><td>Opens the AutoHotkey documentation.</td></tr>
+    <tr><td><strong>Window Spy</strong></td><td>An AutoHotkey tool that shows details of the window under the mouse. It can tell you a program's file name for <code>SkipStandardMethodFor</code>; look for <code>ahk_exe</code>.</td></tr>
+    <tr><td><strong>Reload Script</strong></td><td>Restarts Caret Finder. <strong>Use this after changing settings.</strong></td></tr>
+    <tr><td><strong>Edit Script</strong></td><td>Opens <code>CaretFinder.ahk</code> in your text editor, so you can change the settings.</td></tr>
+    <tr><td><strong>Suspend Hotkeys</strong></td><td>Has <strong>no useful effect</strong> on Caret Finder. The Shift double-tap keeps working.</td></tr>
+    <tr><td><strong>Pause Script</strong></td><td><strong>Not recommended.</strong> The ring may appear late, after you unpause, or stay frozen on screen. Use <strong>Exit</strong> instead.</td></tr>
+    <tr><td><strong>Exit</strong></td><td>Closes Caret Finder. <strong>Use this to turn it off.</strong> Start it again by double-clicking <code>CaretFinder.ahk</code>.</td></tr>
+  </tbody>
+</table>
+</div>
+
+<!-- ===================================================================== -->
+<h2 id="trouble">7. Troubleshooting</h2>
+<details>
+  <summary>Nothing happens when I double-click CaretFinder.ahk</summary>
+  <p>That's normal: there's no window. Look for the green <strong>H</strong> in the system tray, including behind the <strong>^</strong> arrow by the clock. If an error message appears instead, check the last line you edited. Comments must start with <code>;</code>, and text values need double quotes.</p>
+</details>
+<details>
+  <summary>I don't hear anything when no cursor is found</summary>
+  <p>Check your volume. Right-click the speaker icon by the clock, choose <strong>Open Volume mixer</strong>, and make sure <strong>System Sounds</strong> isn't muted. You can also pick a different sound with <code>NotFoundSound</code>.</p>
+</details>
+<details>
+  <summary>The ring appears in the wrong place in one program</summary>
+  <p>Add that program's file name to <code>SkipStandardMethodFor</code>, e.g. <code>["soffice.bin"]</code>, save, then choose <strong>Reload Script</strong>. Switching on <strong>Show which method found the cursor</strong> helps show what's happening.</p>
+</details>
+<details>
+  <summary>Firefox: it plays the "not found" sound</summary>
+  <p>In Firefox, open <strong>Settings</strong>, then <strong>Privacy &amp; Security</strong>, then <strong>Permissions</strong>. Make sure <strong>Prevent accessibility services from accessing your browser</strong> is <em>not</em> ticked. The first double-tap after Firefox starts can occasionally fail while Firefox switches its accessibility support on; just try again.</p>
+</details>
+<details>
+  <summary>LibreOffice: it plays the "not found" sound</summary>
+  <p>Go to <strong>Tools</strong>, then <strong>Options</strong>, then <strong>LibreOffice</strong>, then <strong>Accessibility</strong>. If your version has <strong>Support assistive technology tools</strong>, tick it and restart LibreOffice.</p>
+</details>
+<details>
+  <summary>It can't find the cursor in a program running "as administrator"</summary>
+  <p>Windows stops normal programs from reading windows that run as administrator. This is a safety feature, so leave it in place. Ordinary documents, browsers and editors aren't affected. Don't run Caret Finder as administrator to get around it.</p>
+</details>
+<details>
+  <summary>A message says some settings weren't valid</summary>
+  <p>The message lists each setting it replaced and the safe value it's using instead. Correct those lines in the settings, save, and choose <strong>Reload Script</strong>.</p>
+</details>
+
+<!-- ===================================================================== -->
+<h2 id="privacy">8. Privacy and security</h2>
+<ul>
+  <li>Caret Finder only reads <strong>where</strong> the text cursor is. It doesn't record, store or send what you type.</li>
+  <li>It watches the keyboard only to notice the Shift double-tap and the key press that dismisses the ring. It doesn't collect text.</li>
+  <li>It makes no network connections and writes no files.</li>
+  <li>It needs no administrator rights, to install or to run, and never asks for them.</li>
+</ul>
+
+</main>
+</body>
+</html>
