@@ -514,8 +514,10 @@ FindHighlight(&method) {
         behind := (w != hActive)
         colour := "Highlight colour", uiaSel := "UI Automation selection"
         ia2Sel := "IAccessible2 selection", pageSel := "Firefox page selection"
-        if (exe = "firefox.exe")          ; Firefox's current match IS the page's selection
-            attempts := [pageSel, colour, uiaSel, ia2Sel]
+        ; Firefox: the page method already reads Firefox's selection directly, so
+        ; the slow IAccessible2 search (about 2 s on a big page) would add nothing.
+        if (exe = "firefox.exe")
+            attempts := [pageSel, colour, uiaSel]
         else
             attempts := isBrowser ? [colour, uiaSel, ia2Sel] : [uiaSel, ia2Sel, colour]
         for name in attempts {
