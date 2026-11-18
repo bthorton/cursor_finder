@@ -157,8 +157,13 @@ global gRings := [], gAnim := 0
 global gDocCache := Map()                 ; UIA document per window, for one search
 global gTargets := ParseColours(MatchColours)
 
+; Tray icon: "HF" icon kept next to this script (falls back to the standard
+; AutoHotkey "H" icon if HighlightFinder.ico is missing or can't be loaded).
+if FileExist(A_ScriptDir "\HighlightFinder.ico")
+    try TraySetIcon(A_ScriptDir "\HighlightFinder.ico")
+
 ; Tray menu
-A_IconTip := "Highlight Finder - double-tap Alt to ring the current search match"
+A_IconTip := "HF"
 A_TrayMenu.Add()
 A_TrayMenu.Add("Test ring at mouse pointer", (*) => TestRing())
 A_TrayMenu.Add("Show colour under mouse pointer (copies it)", ShowColourUnderMouse)
