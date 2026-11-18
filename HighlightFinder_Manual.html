@@ -245,6 +245,9 @@
   <li>Open your Downloads folder, right-click the ZIP file, and choose <strong>Extract All…</strong>.</li>
   <li>Move the extracted folder somewhere permanent, for example your Documents folder. Don't leave it in Downloads if you plan to start it automatically.</li>
 </ol>
+<div class="note">
+  <p><strong>Choose a folder only you can change</strong>, such as your Documents folder, not a folder made directly on the <code>C:</code> drive. See <a href="#folder">Keep the script in a folder only you can change</a>.</p>
+</div>
 
 <h3>Option B: download just the script</h3>
 <ol>
@@ -547,8 +550,30 @@
   <li>It writes no files, unless you switch on the debug log. The log records right Shift presses, window titles and what each method found, never what you type, and stays in your own Temp folder.</li>
   <li>It only writes to the clipboard when you choose <strong>Show colour under mouse pointer</strong>.</li>
   <li>It needs no administrator rights, to install or to run, and never asks for them.</li>
-  <li><strong>Keep the script in a folder only you can change.</strong> A script is a program: if someone else could edit it, their changes would run with your access the next time it starts. Your own Documents folder is safe by default.</li>
 </ul>
+
+<h3 id="folder">Keep the script in a folder only you can change</h3>
+<p>An AutoHotkey script is a program. If another person who uses your PC could edit <code>HighlightFinder.ahk</code>, their changes would run with <em>your</em> access the next time it starts, which is every time you sign in if you've added it to your Startup folder. So keep it in a folder that only you can change.</p>
+<ul>
+  <li><strong>Safe:</strong> folders inside your own user folder, <code>C:\Users\YourName\</code>, such as your Documents folder. By default, other accounts can't change anything there.</li>
+  <li><strong>Not safe by default:</strong> folders created directly on the <code>C:</code> drive, such as <code>C:\Documents</code> or <code>C:\Tools</code>. Windows lets any account on the PC change files in those. The same goes for shared or network folders and USB drives.</li>
+</ul>
+
+<h3>How to check a folder</h3>
+<ol>
+  <li>In File Explorer, right-click the folder holding <code>HighlightFinder.ahk</code> and choose <strong>Properties</strong>, then the <strong>Security</strong> tab.</li>
+  <li>Click each of <strong>Authenticated Users</strong>, <strong>Users</strong> and <strong>Everyone</strong> in the list, if they're there.</li>
+  <li>If <strong>Modify</strong> or <strong>Write</strong> is ticked in the <strong>Allow</strong> column for any of them, other accounts can change the script.</li>
+</ol>
+
+<h3>How to fix it</h3>
+<p><strong>Easiest:</strong> move the whole folder into your Documents folder. If you set up a Startup shortcut, update its <strong>Target</strong> to the new location (see <a href="#install">Step 3</a>).</p>
+<p><strong>Or</strong> keep the folder where it is and make it changeable only by you. You don't need administrator rights for folders you created yourself. Press <kbd>Windows</kbd>, type <em>Terminal</em>, press <kbd>Enter</kbd>, and run this, replacing the folder path with your own:</p>
+<pre><code>icacls "C:\Documents\Cursor_Finder" /inheritance:r /grant:r "${env:USERNAME}:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)RX" "*S-1-5-32-545:(OI)(CI)RX"</code></pre>
+<p>This gives you full control, keeps full access for Windows itself (needed for backups and virus scans), and lets every other account, including other administrator accounts, read and run the files but not change them. Check the result with the steps above.</p>
+<div class="note">
+  <p>Any administrator account can still take ownership of a folder and give itself access back; Windows always allows that. This protects against changes from other people's accounts, but not from someone deliberately overriding it with an administrator account.</p>
+</div>
 
 </main>
 </body>
