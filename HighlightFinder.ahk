@@ -111,6 +111,9 @@ BeepFrequency     := 800        ; Simple beep (used if the sound file is missing
 BeepDuration      := 200        ;   pitch in Hz and length in milliseconds.
 
 ShowMethodTooltip := false      ; true = show which method found the match.
+DebugLog          := true       ; true = write what happens on each double-tap to LogFile
+                                ;   (tray menu > "Open the debug log"). Normally false.
+LogFile           := A_Temp "\HighlightFinder_log.txt"
 
 AllowRunAsAdmin   := false      ; false = if started as administrator, ask whether to
                                 ;   carry on and close if you say No. Leave false.
@@ -155,6 +158,10 @@ A_TrayMenu.Add("Show colour under mouse pointer (copies it)", ShowColourUnderMou
 A_TrayMenu.Add("Show which method found the match", ToggleMethodTip)
 if ShowMethodTooltip
     A_TrayMenu.Check("Show which method found the match")
+A_TrayMenu.Add("Write a debug log", ToggleDebugLog)
+if DebugLog
+    A_TrayMenu.Check("Write a debug log")
+A_TrayMenu.Add("Open the debug log", (*) => FileExist(LogFile) ? Run('notepad.exe "' LogFile '"') : MsgBox("No debug log yet.", "Highlight Finder"))
 
 StartKeyWatcher()
 return
@@ -201,10 +208,13 @@ WatchKeyUp(ih, vk, sc) {
     spoiled := gTapSpoiled
     gAltDownAt := 0
     if (spoiled || held > MaxTapHold) {   ; Alt+key shortcut, or Alt held down
+        Dbg("Alt released - not a tap (" (spoiled ? "another key was involved" : "held " held " ms") ")")
         gTapLast := 0
         return
     }
+    Dbg("Alt tap")
     if (gTapLast && A_TickCount - gTapLast <= DoubleTapTime) {
+        Dbg("Double-tap of Alt detected (" (A_TickCount - gTapLast) " ms apart)")
         gTapLast := 0
         SetTimer(ShowHighlightRing, -1)   ; run outside the key callback
     } else {
@@ -234,6 +244,7 @@ ShowHighlightRing() {
     r := 0
     try r := FindHighlight(&method)
     gDocCache := Map()                    ; let go of the programs' objects
+    Dbg(r ? "RESULT: found via " method : "RESULT: nothing found - beep")
     if !r {
         NotFoundAlert()
         if ShowMethodTooltip
@@ -385,24 +396,53 @@ FindHighlight(&method) {
         if (name = exe)
             isBrowser := true
 
+    Dbg("Active window: " WinInfo(hActive))
     for w in DocumentWindows(hActive) {
-        if !IsResponsive(w)               ; don't query a frozen program
+        if (w != hActive)
+            Dbg("Also trying window behind: " WinInfo(w))
+        if !IsResponsive(w) {             ; don't query a frozen program
+            Dbg("  not responding - skipped")
             continue
+        }
         behind := (w != hActive)
         colour := ["Highlight colour", () => MatchFromColour(w)]
         uiaSel := ["UI Automation selection", () => SelectionFromUIA(w, behind)]
         ia2Sel := ["IAccessible2 selection", () => SelectionFromIA2(w)]
         attempts := isBrowser ? [colour, uiaSel, ia2Sel] : [uiaSel, ia2Sel, colour]
         for a in attempts {
-            r := 0
+            r := 0, t0 := A_TickCount
             try r := a[2]()
-            if (r && Plausible(r, w)) {
+            catch as e
+                Dbg("  " a[1] ": error: " e.Message)
+            ok := r && Plausible(r, w)
+            Dbg("  " a[1] ": " (r ? "x=" r.x " y=" r.y " w=" r.w " h=" r.h (ok ? " - accepted" : " - rejected (off window)")
+                                  : "nothing") "  (" (A_TickCount - t0) " ms)")
+            if ok {
                 method := a[1] (behind ? " (in the window behind)" : "")
                 return r
             }
         }
     }
     return 0
+}
+
+WinInfo(h) {
+    s := "", r := WindowRect(h)
+    try s := WinGetProcessName(h) " class=" WinGetClass(h) ' title="' SubStr(WinGetTitle(h), 1, 60) '"'
+    return s (r ? " at " r.l "," r.t " size " (r.r - r.l) "x" (r.b - r.t) : "")
+}
+
+Dbg(s) {
+    if !DebugLog
+        return
+    try FileAppend(FormatTime(, "HH:mm:ss") "." Format("{:03}", A_MSec) "  " s "`n", LogFile, "UTF-8")
+}
+
+ToggleDebugLog(itemName, *) {
+    global DebugLog := !DebugLog
+    A_TrayMenu.ToggleCheck(itemName)
+    if DebugLog
+        Dbg("---- Debug log switched on ----")
 }
 
 ; The active window, plus the document window behind it when the active window
