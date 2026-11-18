@@ -298,6 +298,8 @@ ShowTip(text, x?, y?, ms := 2500) {
 ; and say so.
 ShowOffscreenMatch(r) {
     wr := WindowRect(r.offscreenIn)
+    if (wr && r.HasOwnProp("view"))
+        wr := Intersect(wr, r.view) || wr     ; the page area, if Firefox gave it
     if (wr && (vs := Intersect(wr, VirtualScreen())))
         wr := vs                          ; only the part that's actually on screen
     if !wr {
@@ -528,9 +530,19 @@ FindHighlight(&method) {
             } catch as e {
                 Dbg("  " name ": error: " e.Message " (line " e.Line ")")
             }
-            ok := r && Plausible(r, w)
-            Dbg("  " name ": " (r ? "x=" r.x " y=" r.y " w=" r.w " h=" r.h (ok ? " - accepted" : " - rejected (off window)")
-                                  : "nothing") "  (" (A_TickCount - t0) " ms)")
+            ; Firefox says which part of the window shows the page: a match outside
+            ; that (e.g. scrolled up behind the toolbar) isn't visible.
+            if (r && IsObject(r) && r.HasOwnProp("view"))
+                ok := Plausible(r, w) && InRegion(r, r.view)
+            else
+                ok := r && Plausible(r, w)
+            rough := r && IsObject(r) && r.HasOwnProp("roughly")
+            Dbg("  " name ": " (r ? "x=" r.x " y=" r.y " w=" r.w " h=" r.h (rough ? " (rough, from the text cursor)" : "")
+                                  . (ok ? " - on screen" : " - off-screen") : "nothing") "  (" (A_TickCount - t0) " ms)")
+            ; A rough position on screen might be the wrong occurrence of the
+            ; word: let the highlight-colour search find the exact one instead.
+            if (ok && rough)
+                continue
             if ok {
                 method := name (behind ? " (in the window behind)" : "")
                 return r
@@ -606,6 +618,12 @@ DocumentWindows(hActive) {
 }
 
 ; Reject empty or off-window results (e.g. a selection scrolled out of view).
+; True if the middle of rectangle r is inside region g ({l, t, r, b}).
+InRegion(r, g) {
+    cx := r.x + r.w / 2, cy := r.y + r.h / 2
+    return cx >= g.l && cx < g.r && cy >= g.t && cy < g.b
+}
+
 Plausible(r, hwnd) {
     if (!IsRect(r) || r.w < 1 || r.h < 1)
         return false
@@ -977,16 +995,105 @@ SelectionFromFirefoxPage(hwnd) {
         doc := FindVisibleDocument(root, hwnd)
     if (!doc || !(text := IA2Text(doc)))
         return 0
-    n := 0, s := 0, e := 0
-    if (ComCall(7, text, "int*", &n, "int") != 0 || n < 1)          ; get_nSelections
+    r := 0, n := 0, s := 0, e := 0
+    if (ComCall(7, text, "int*", &n, "int") = 0 && n > 0                    ; get_nSelections
+        && ComCall(9, text, "int", 0, "int*", &s, "int*", &e, "int") = 0) { ; get_selection(0)
+        if (e < s)
+            t := s, s := e, e := t
+        if (e > s && s >= 0)
+            r := UnionRects([LeafCharBox(text, s, true), LeafCharBox(text, e - 1, false)])
+    }
+    ; While you're typing in the Find box, Firefox may report no selection but
+    ; puts its text cursor at the end of the current match.
+    if !r
+        r := MatchBeforeCaret(root, doc, text)
+    if r {
+        loc := AccLocation(doc)               ; the part of the window showing the page
+        if (loc && loc.w > 0 && loc.h > 0)
+            r.view := {l: loc.x, t: loc.y, r: loc.x + loc.w, b: loc.y + loc.h}
+    }
+    return r
+}
+
+; Follows Firefox's text cursor down from the page to the text holding it.
+; Firefox puts the cursor in the text containing the current match (at the end
+; of that text, not always right after the match), so the search word is looked
+; for in that text: the occurrence nearest before the cursor. Only used while
+; the Find bar is open, and only if that text contains the search word, so an
+; old cursor position left by a click is never mistaken for the match.
+; The result is marked .roughly, as it may be the wrong occurrence in the text.
+MatchBeforeCaret(root, doc, text) {
+    static IID_IAccessibleHypertext := "{6B4F8BBF-F1F2-418A-B35E-A195BC4103B9}"
+    loc := AccLocation(doc)
+    find := FirefoxFindText(root, loc)
+    if (find = "")
         return 0
-    if (ComCall(9, text, "int", 0, "int*", &s, "int*", &e, "int") != 0)  ; get_selection(0)
+    loop 60 {
+        c := -1, ht := 0, idx := -1, pLink := 0
+        if (ComCall(5, text, "int*", &c, "int") != 0 || c < 0)      ; get_caretOffset
+            return 0
+        try ht := ComObjQuery(text, IID_IAccessibleHypertext)
+        if (!ht || ComCall(24, ht, "int", c, "int*", &idx, "int") != 0 || idx < 0)
+            break                             ; the cursor is in this text itself
+        if (ComCall(23, ht, "int", idx, "ptr*", &pLink, "int") != 0 || !pLink)
+            return 0
+        child := 0
+        try child := ComObjQuery(ComValue(13, pLink), IID_IAccessibleText)
+        if !child
+            return 0
+        text := child
+    }
+    ; Search the text up to the cursor for the last occurrence of the word
+    ; (InStr ignores upper/lower case; -1 = search backwards from the end).
+    before := IA2GetText(text, Max(0, c - 20000), c)
+    p := InStr(before, find, false, -1)
+    if !p
         return 0
-    if (e < s)
-        t := s, s := e, e := t
-    if (e <= s || s < 0)
-        return 0
-    return UnionRects([LeafCharBox(text, s, true), LeafCharBox(text, e - 1, false)])
+    s := c - StrLen(before) + p - 1
+    r := UnionRects([IA2CharBox(text, s), IA2CharBox(text, s + StrLen(find) - 1)])
+    if r
+        r.roughly := true
+    return r
+}
+
+; The text in Firefox's Find box: a visible text field just below the page
+; area (where Firefox puts its Find bar), outside the page itself. Returns ""
+; if the Find bar is closed.
+FirefoxFindText(root, pageLoc) {
+    if !pageLoc
+        return ""
+    pageBottom := pageLoc.y + pageLoc.h
+    queue := [root], budget := 400
+    while (queue.Length && budget-- > 0) {
+        acc := queue.RemoveAt(1)
+        for child in AccChildren(acc) {
+            role := AccRole(child)
+            if (role = 0xF || role = 0x2 || role = 0xB)   ; pages, menus
+                continue
+            st := AccState(child)
+            if (st >= 0 && (st & 0x8000))                 ; INVISIBLE (e.g. closed Find bar)
+                continue
+            loc := AccLocation(child)
+            if (loc && loc.h > 0 && loc.y + loc.h <= pageLoc.y)
+                continue                                  ; tabs, toolbars, address bar
+            if (role = 0x2A) {                            ; ROLE_SYSTEM_TEXT
+                if (loc && loc.w > 0 && loc.y >= pageBottom - 5)
+                    return AccValue(child)
+                continue
+            }
+            queue.Push(child)
+        }
+    }
+    return ""
+}
+
+IA2GetText(text, s, e) {
+    p := 0
+    if (ComCall(10, text, "int", s, "int", e, "ptr*", &p, "int") != 0 || !p)  ; get_text
+        return ""
+    str := StrGet(p, "UTF-16")
+    DllCall("oleaut32\SysFreeString", "ptr", p)
+    return str
 }
 
 ; A page's text holds one placeholder character for each paragraph, link etc.
@@ -1223,6 +1330,31 @@ AccState(acc) {
     st := (hr = 0 && NumGet(out, 0, "ushort") = 3) ? NumGet(out, 8, "uint") : -1
     DllCall("oleaut32\VariantClear", "ptr", out)
     return st
+}
+
+AccFocusedChild(acc) {
+    v := Buffer(A_PtrSize = 8 ? 24 : 16, 0)
+    if (ComCall(18, acc, "ptr", v, "int") != 0)  ; get_accFocus
+        return 0
+    return AccFromVariant(v, 0)                  ; 0 = itself, a simple child, or nothing
+}
+
+AccValue(acc) {
+    p := 0, hr := -1
+    try {
+        if (A_PtrSize = 8) {
+            v := Buffer(24, 0)                   ; VARIANT (VT_I4 CHILDID_SELF)
+            NumPut("ushort", 3, v, 0)
+            hr := ComCall(11, acc, "ptr", v, "ptr*", &p, "int")          ; get_accValue
+        } else {
+            hr := ComCall(11, acc, "int64", 3, "int64", 0, "ptr*", &p, "int")
+        }
+    }
+    if (hr != 0 || !p)
+        return ""
+    str := StrGet(p, "UTF-16")
+    DllCall("oleaut32\SysFreeString", "ptr", p)
+    return str
 }
 
 AccNavigate(acc, navDir) {
