@@ -223,6 +223,7 @@
   <li>On the project page, click <code>CaretFinder.ahk</code>.</li>
   <li>Click the <strong>Download raw file</strong> button (a downward arrow, near the top right of the file).</li>
   <li>Move the file to a permanent folder, for example Documents.</li>
+  <li>Optional: do the same for <code>CaretFinder.ico</code> and put it in the same folder. It gives the tray icon its "CF" look.</li>
 </ol>
 
 <div class="note">
@@ -270,7 +271,8 @@
 <h3>Step 2: start Caret Finder</h3>
 <ol>
   <li>Double-click <code>CaretFinder.ahk</code>.</li>
-  <li>No window opens. That's normal. A small green square with a white <strong>H</strong> appears in the system tray, at the bottom right of the screen by the clock. If you can't see it, click the small up-arrow (<strong>^</strong>) next to the clock.</li>
+  <li>No window opens. That's normal. A small magenta square with black <strong>CF</strong> on it appears in the system tray, at the bottom right of the screen by the clock. If you can't see it, click the small up-arrow (<strong>^</strong>) next to the clock.
+    <br>The icon comes from <code>CaretFinder.ico</code>, which must be in the same folder as <code>CaretFinder.ahk</code>. Without it, you'll see AutoHotkey's standard green <strong>H</strong> instead; Caret Finder still works.</li>
 </ol>
 
 <h3>Step 3 (optional): start it automatically when you sign in</h3>
@@ -311,7 +313,7 @@
 
 <h3>Changing a setting</h3>
 <ol>
-  <li>Right-click the green <strong>H</strong> tray icon and choose <strong>Edit Script</strong>. Or open <code>CaretFinder.ahk</code> in Notepad.</li>
+  <li>Right-click the magenta <strong>CF</strong> tray icon and choose <strong>Edit Script</strong>. Or open <code>CaretFinder.ahk</code> in Notepad.</li>
   <li>Find the block marked <code>SETTINGS</code> near the top. Each line looks like this:
     <pre><code>RingRadius        := 45         ; Final radius of the ring around the cursor, pixels.</code></pre>
     Change only the value after <code>:=</code>. Text after a semicolon (<code>;</code>) is a comment and is ignored.</li>
@@ -391,7 +393,7 @@
 
 <!-- ===================================================================== -->
 <h2 id="tray">6. System tray options</h2>
-<p>Right-click the green <strong>H</strong> icon in the system tray (bottom right, by the clock) to open the menu. Hovering over the icon shows "Caret Finder - double-tap Shift to find the text cursor".</p>
+<p>Right-click the magenta <strong>CF</strong> icon in the system tray (bottom right, by the clock) to open the menu. Hovering over the icon shows "CF".</p>
 
 <h3>Caret Finder's own options (at the bottom of the menu)</h3>
 <dl>
@@ -422,7 +424,7 @@
 <h2 id="trouble">7. Troubleshooting</h2>
 <details>
   <summary>Nothing happens when I double-click CaretFinder.ahk</summary>
-  <p>That's normal: there's no window. Look for the green <strong>H</strong> in the system tray, including behind the <strong>^</strong> arrow by the clock. If an error message appears instead, check the last line you edited. Comments must start with <code>;</code>, and text values need double quotes.</p>
+  <p>That's normal: there's no window. Look for the magenta <strong>CF</strong> icon (or a green <strong>H</strong> if <code>CaretFinder.ico</code> is missing) in the system tray, including behind the <strong>^</strong> arrow by the clock. If an error message appears instead, check the last line you edited. Comments must start with <code>;</code>, and text values need double quotes.</p>
 </details>
 <details>
   <summary>I don't hear anything when no cursor is found</summary>

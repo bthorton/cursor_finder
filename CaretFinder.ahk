@@ -157,8 +157,13 @@ global gTapLast := 0, gShiftDownAt := 0, gTapSpoiled := false, gIH := 0
 global gRings := [], gAnim := 0
 global gLastFocus := {hwnd: 0, id: 0, child: 0}
 
+; Tray icon: "CF" icon kept next to this script (falls back to the standard
+; AutoHotkey "H" icon if CaretFinder.ico is missing or can't be loaded).
+if FileExist(A_ScriptDir "\CaretFinder.ico")
+    try TraySetIcon(A_ScriptDir "\CaretFinder.ico")
+
 ; Tray menu
-A_IconTip := "Caret Finder - double-tap Shift to find the text cursor"
+A_IconTip := "CF"
 A_TrayMenu.Add()
 A_TrayMenu.Add("Test ring at mouse pointer", (*) => TestRing())
 A_TrayMenu.Add("Show which method found the cursor", ToggleMethodTip)
