@@ -114,8 +114,10 @@ BeepFrequency     := 800        ; Simple beep (used if the sound file is missing
 BeepDuration      := 200        ;   pitch in Hz and length in milliseconds.
 
 ShowMethodTooltip := false      ; true = show which method found the match.
-DebugLog          := true       ; true = write what happens on each double-tap to LogFile
+DebugLog          := false      ; true = write what happens on each double-tap to LogFile
                                 ;   (tray menu > "Open the debug log"). Normally false.
+                                ;   Right Shift presses are logged, never what you type; the
+                                ;   log starts afresh when it reaches about 1 MB.
 LogFile           := A_Temp "\HighlightFinder_log.txt"
 
 AllowRunAsAdmin   := false      ; false = if started as administrator, ask whether to
@@ -569,10 +571,17 @@ WinInfo(h) {
     return s (r ? " at " r.l "," r.t " size " (r.r - r.l) "x" (r.b - r.t) : "")
 }
 
+; Right Shift presses, double-taps and what followed are logged; never what
+; you type.
 Dbg(s) {
     if !DebugLog
         return
-    try FileAppend(FormatTime(, "HH:mm:ss") "." Format("{:03}", A_MSec) "  " s "`n", LogFile, "UTF-8")
+    try {
+        if (FileExist(LogFile) && FileGetSize(LogFile) > 1000000)   ; about 1 MB:
+            FileDelete(LogFile)                                    ;   start afresh
+        FileAppend(FormatTime(, "yyyy-MM-dd HH:mm:ss") "." Format("{:03}", A_MSec) "  " s "`n"
+                 , LogFile, "UTF-8")
+    }
 }
 
 ToggleDebugLog(itemName, *) {
