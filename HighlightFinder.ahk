@@ -256,6 +256,10 @@ ShowHighlightRing() {
             ShowTip("Highlight Finder: no current search match found")
         return
     }
+    if r.HasOwnProp("offscreenIn") {
+        ShowOffscreenMatch(r)
+        return
+    }
     if !ShowRingAround(r) {
         NotFoundAlert()
         return
@@ -274,9 +278,43 @@ NotFoundAlert() {
     SoundBeep(BeepFrequency, BeepDuration)
 }
 
-ShowTip(text, x?, y?) {
+ShowTip(text, x?, y?, ms := 2500) {
     ToolTip(text, x?, y?)
-    SetTimer(() => ToolTip(), -2500)
+    SetTimer(() => ToolTip(), -ms)
+}
+
+; The current match is outside the window (or in text the page hides off to
+; one side). Put the ring on the window's edge, at the point nearest the match,
+; and say so.
+ShowOffscreenMatch(r) {
+    wr := WindowRect(r.offscreenIn)
+    if (wr && (vs := Intersect(wr, VirtualScreen())))
+        wr := vs                          ; only the part that's actually on screen
+    if !wr {
+        NotFoundAlert()
+        return
+    }
+    cx := r.x + r.w / 2, cy := r.y + r.h / 2
+    ex := Max(wr.l, Min(wr.r - 1, cx)), ey := Max(wr.t, Min(wr.b - 1, cy))
+    sides := []
+    if (cy < wr.t)
+        sides.Push("above")
+    if (cy >= wr.b)
+        sides.Push("below")
+    if (cx < wr.l)
+        sides.Push("to the left")
+    if (cx >= wr.r)
+        sides.Push("to the right")
+    where := ""
+    for s in sides
+        where .= (A_Index > 1 ? " and " : " ") s
+    if !ShowRingAt(ex, ey, RingRadius, RingRadius)
+        NotFoundAlert()
+    ; Keep the note inside the window, next to the ring.
+    tx := Max(wr.l + 10, Min(wr.r - 420, ex - 60))
+    ty := (ey + RingRadius + 70 < wr.b) ? ey + RingRadius + 10 : ey - RingRadius - 60
+    ShowTip("The current match is off-screen" where ", or hidden by the page.`n"
+          . "Press Enter in the Find bar to go to the next match.", tx, Max(wr.t + 10, ty), 6000)
 }
 
 TestRing() {
@@ -437,10 +475,12 @@ FindHighlight(&method) {
             }
             ; Firefox told us where its current match is, but it's off-screen
             ; (e.g. hidden screen-reader text). The other methods would only take
-            ; longer to find the same thing, so stop here.
-            if (r && name = pageSel) {
+            ; longer to find the same thing, so stop here and report it.
+            if (r && IsRect(r) && name = pageSel) {
                 Dbg("  Firefox's current match is off-screen - not trying the other methods")
-                return 0
+                r.offscreenIn := w
+                method := name " (off-screen)"
+                return r
             }
         }
     }
