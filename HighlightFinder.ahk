@@ -182,14 +182,16 @@ StartKeyWatcher(*) {
     gIH.Start()
 }
 
-IsRightShift(sc) => (sc = 0x36)          ; scan code of the right Shift key
+; Right Shift: AutoHotkey reports its scan code as 0x136 (0x36 on some keyboards),
+; and its virtual-key code is 0xA1.
+IsRightShift(vk, sc) => (sc = 0x136 || sc = 0x36 || vk = 0xA1)
 
 WatchKeyDown(ih, vk, sc) {
     global gTapLast, gShiftDownAt, gTapSpoiled
     ; Any key press starts the fade of a ring that is waiting for one.
     if (IsObject(gAnim) && !gAnim.fadeStart && A_TickCount - gAnim.start >= 150)
         gAnim.fadeStart := A_TickCount
-    if IsRightShift(sc) {
+    if IsRightShift(vk, sc) {
         if !gShiftDownAt {                ; ignore key auto-repeat
             gShiftDownAt := A_TickCount
             ; Ctrl/Alt/Win already held (e.g. Ctrl+Shift to switch keyboard) = not a tap
@@ -204,7 +206,7 @@ WatchKeyDown(ih, vk, sc) {
 
 WatchKeyUp(ih, vk, sc) {
     global gTapLast, gShiftDownAt, gTapSpoiled
-    if !IsRightShift(sc)
+    if !IsRightShift(vk, sc)
         return
     held := gShiftDownAt ? A_TickCount - gShiftDownAt : 99999
     spoiled := gTapSpoiled
