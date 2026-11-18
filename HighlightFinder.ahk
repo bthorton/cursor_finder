@@ -31,7 +31,11 @@
 ;    scripts are independent; run either or both.
 ;
 ;  HOW IT FINDS THE CURRENT MATCH (tried in this order)
-;    Web browsers (see BrowserApps):
+;    Firefox:
+;      1. Firefox page selection - Firefox's Find selects the current match,
+;         so the script asks Firefox where the page's selection is.
+;      2. onwards as for other web browsers, below.
+;    Other web browsers (see BrowserApps):
 ;      1. Highlight colour - looks on screen for the colour the browser paints
 ;         the current match: orange in Chrome / Edge, green in Firefox.
 ;         (Other matches are yellow / pink, so they are ignored.)
@@ -408,12 +412,16 @@ FindHighlight(&method) {
         }
         behind := (w != hActive)
         colour := "Highlight colour", uiaSel := "UI Automation selection"
-        ia2Sel := "IAccessible2 selection"
-        attempts := isBrowser ? [colour, uiaSel, ia2Sel] : [uiaSel, ia2Sel, colour]
+        ia2Sel := "IAccessible2 selection", pageSel := "Firefox page selection"
+        if (exe = "firefox.exe")          ; Firefox's current match IS the page's selection
+            attempts := [pageSel, colour, uiaSel, ia2Sel]
+        else
+            attempts := isBrowser ? [colour, uiaSel, ia2Sel] : [uiaSel, ia2Sel, colour]
         for name in attempts {
             r := 0, t0 := A_TickCount
             try {
                 switch name {
+                    case pageSel: r := SelectionFromFirefoxPage(w)
                     case colour: r := MatchFromColour(w)
                     case uiaSel: r := SelectionFromUIA(w, behind)
                     case ia2Sel: r := SelectionFromIA2(w)
@@ -849,6 +857,98 @@ ReadRectsFromSafeArray(psa) {
     return out
 }
 
+;---------- Firefox page selection ----------------------------------------------
+; Firefox's Find selects the current match. Ask Firefox for the page in the
+; current tab, read its selection, then step down through the page's
+; structure (section, paragraph, link ...) to the characters themselves.
+SelectionFromFirefoxPage(hwnd) {
+    if !(root := AccFromWindow(hwnd, 0xFFFFFFFC))    ; OBJID_CLIENT
+        return 0
+    doc := AccNavigate(root, 0x1009)          ; NAVRELATION_EMBEDS = the current tab's page
+    if !doc
+        doc := FindVisibleDocument(root, hwnd)
+    if (!doc || !(text := IA2Text(doc)))
+        return 0
+    n := 0, s := 0, e := 0
+    if (ComCall(7, text, "int*", &n, "int") != 0 || n < 1)          ; get_nSelections
+        return 0
+    if (ComCall(9, text, "int", 0, "int*", &s, "int*", &e, "int") != 0)  ; get_selection(0)
+        return 0
+    if (e < s)
+        t := s, s := e, e := t
+    if (e <= s || s < 0)
+        return 0
+    return UnionRects([LeafCharBox(text, s, true), LeafCharBox(text, e - 1, false)])
+}
+
+; A page's text holds one placeholder character for each paragraph, link etc.
+; inside it. This follows the character at `off` down through those to the text
+; that really contains it, and returns that character's box.
+; IAccessibleHypertext adds to IAccessibleText (slots 3-21):
+;   22 get_nHyperlinks  23 get_hyperlink  24 get_hyperlinkIndex
+LeafCharBox(text, off, isStart) {
+    static IID_IAccessibleHypertext := "{6B4F8BBF-F1F2-418A-B35E-A195BC4103B9}"
+    loop 40 {
+        ht := 0, idx := -1, pLink := 0
+        try ht := ComObjQuery(text, IID_IAccessibleHypertext)
+        if (!ht || ComCall(24, ht, "int", off, "int*", &idx, "int") != 0 || idx < 0)
+            break                             ; a real character: we're there
+        if (ComCall(23, ht, "int", idx, "ptr*", &pLink, "int") != 0 || !pLink)
+            break
+        link := ComValue(13, pLink)
+        child := 0
+        try child := ComObjQuery(link, IID_IAccessibleText)
+        if !child {                           ; e.g. an image: use its whole box
+            acc := 0
+            try acc := ComObjQuery(link, IID_IAccessible)
+            return acc ? AccLocation(acc) : IA2CharBox(text, off)
+        }
+        o := ChildOffset(child, isStart)
+        if (o < 0)
+            break
+        text := child, off := o
+    }
+    return IA2CharBox(text, off)
+}
+
+; Where the selection starts (or ends) inside a child. If the child doesn't
+; report a selection, the selection covers it from its first (to its last)
+; character.
+ChildOffset(text, isStart) {
+    n := 0, s := 0, e := 0, c := 0
+    if (ComCall(7, text, "int*", &n, "int") = 0 && n > 0
+        && ComCall(9, text, "int", 0, "int*", &s, "int*", &e, "int") = 0 && e > s)
+        return isStart ? s : e - 1
+    if isStart
+        return 0
+    if (ComCall(17, text, "int*", &c, "int") != 0)  ; get_nCharacters
+        return -1
+    return c - 1
+}
+
+; Fallback if Firefox can't say which page is current: the first visible
+; document in the window (without looking inside any page).
+FindVisibleDocument(root, hwnd) {
+    if !(win := WindowRect(hwnd))
+        return 0
+    queue := [root], budget := 300
+    while (queue.Length && budget-- > 0) {
+        acc := queue.RemoveAt(1)
+        for child in AccChildren(acc) {
+            if SkipInSearch(child, win)
+                continue
+            if (AccRole(child) = 0xF) {           ; ROLE_SYSTEM_DOCUMENT
+                st := AccState(child)             ; skip hidden tabs' pages
+                if (st >= 0 && !(st & 0x18000))   ; INVISIBLE | OFFSCREEN
+                    return child
+                continue
+            }
+            queue.Push(child)
+        }
+    }
+    return 0
+}
+
 ;---------- IAccessible2 selection (LibreOffice, Firefox) -----------------------
 SelectionFromIA2(hwnd) {
     if !(root := AccFromWindow(hwnd, 0xFFFFFFFC))    ; OBJID_CLIENT
@@ -998,6 +1098,42 @@ AccRole(acc) {
     role := (hr = 0 && NumGet(out, 0, "ushort") = 3) ? NumGet(out, 8, "int") : 0
     DllCall("oleaut32\VariantClear", "ptr", out)
     return role
+}
+
+AccState(acc) {
+    out := Buffer(A_PtrSize = 8 ? 24 : 16, 0)
+    hr := -1
+    try {
+        if (A_PtrSize = 8) {
+            v := Buffer(24, 0)                   ; VARIANT (VT_I4 CHILDID_SELF)
+            NumPut("ushort", 3, v, 0)
+            hr := ComCall(14, acc, "ptr", v, "ptr", out, "int")          ; get_accState
+        } else {
+            hr := ComCall(14, acc, "int64", 3, "int64", 0, "ptr", out, "int")
+        }
+    }
+    st := (hr = 0 && NumGet(out, 0, "ushort") = 3) ? NumGet(out, 8, "uint") : -1
+    DllCall("oleaut32\VariantClear", "ptr", out)
+    return st
+}
+
+AccNavigate(acc, navDir) {
+    out := Buffer(A_PtrSize = 8 ? 24 : 16, 0)
+    hr := -1
+    try {
+        if (A_PtrSize = 8) {
+            v := Buffer(24, 0)                   ; VARIANT (VT_I4 CHILDID_SELF)
+            NumPut("ushort", 3, v, 0)
+            hr := ComCall(23, acc, "int", navDir, "ptr", v, "ptr", out, "int")   ; accNavigate
+        } else {
+            hr := ComCall(23, acc, "int", navDir, "int64", 3, "int64", 0, "ptr", out, "int")
+        }
+    }
+    if (hr != 0) {
+        DllCall("oleaut32\VariantClear", "ptr", out)
+        return 0
+    }
+    return AccFromVariant(out, 0)                ; frees it if it isn't an object
 }
 
 AccChildren(acc, maxCount := 300) {
