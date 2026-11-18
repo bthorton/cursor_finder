@@ -91,6 +91,13 @@ DoubleTapTime     := 400        ; Max milliseconds between the two Alt taps.
 MaxTapHold        := 350        ; An Alt press held longer than this isn't a "tap".
 ScanDelay         := 150        ; Milliseconds to wait after the second tap before looking,
                                 ;   so a menu bar opened by the first tap has closed again.
+StopAltMenu       := true       ; true  = a double-tap doesn't open/close the menu bar (which
+                                ;   can move focus, e.g. into LibreOffice's Find box).
+                                ;   A single Alt tap still opens the menu bar, just after a
+                                ;   DoubleTapTime pause. But if you tap Alt and then press a
+                                ;   letter within that pause (e.g. Alt, then F for File),
+                                ;   the letter is typed instead: hold Alt+F together instead.
+                                ; false = leave Alt exactly as Windows normally has it.
 
 MatchColours      := ["FF9632", "38D878"]
                                 ; Colours browsers paint the CURRENT match, as RRGGBB:
@@ -177,7 +184,15 @@ StartKeyWatcher(*) {
     gIH.OnKeyDown := WatchKeyDown
     gIH.OnKeyUp := WatchKeyUp
     gIH.OnEnd := (*) => SetTimer(StartKeyWatcher, -500)   ; restart if ever stopped
+    gIH.MinSendLevel := 1                 ; ignore the keys this script sends itself
     gIH.Start()
+}
+
+; A single Alt tap was held back (StopAltMenu): send it on now, as a normal tap.
+ReplayAltTap() {
+    global gTapLast := 0
+    Dbg("Single Alt tap - passing it on to open the menu bar")
+    Send("{LAlt}")
 }
 
 IsAltVK(vk) => (vk = 0x12 || vk = 0xA4 || vk = 0xA5)
@@ -193,8 +208,13 @@ WatchKeyDown(ih, vk, sc) {
             ; Ctrl/Shift/Win already held (e.g. AltGr = Ctrl+Alt) = not a tap
             gTapSpoiled := GetKeyState("Ctrl") || GetKeyState("Shift")
                         || GetKeyState("LWin") || GetKeyState("RWin")
+            ; An unused key "masks" Alt, so releasing it won't activate the menu bar.
+            if (StopAltMenu && !gTapSpoiled)
+                Send("{Blind}{vkE8}")
         }
     } else {                              ; any other key = not a double-tap
+        if gTapLast
+            SetTimer(ReplayAltTap, 0)     ; that tap wasn't for the menu bar after all
         gTapLast := 0
         gTapSpoiled := true
     }
@@ -216,9 +236,12 @@ WatchKeyUp(ih, vk, sc) {
     if (gTapLast && A_TickCount - gTapLast <= DoubleTapTime) {
         Dbg("Double-tap of Alt detected (" (A_TickCount - gTapLast) " ms apart)")
         gTapLast := 0
+        SetTimer(ReplayAltTap, 0)         ; the first tap was part of this, not for the menu
         SetTimer(ShowHighlightRing, -1)   ; run outside the key callback
     } else {
         gTapLast := A_TickCount
+        if StopAltMenu
+            SetTimer(ReplayAltTap, -DoubleTapTime)
     }
 }
 
@@ -228,6 +251,7 @@ WatchKeyUp(ih, vk, sc) {
 ~*MButton::
 {
     global gTapLast := 0
+    SetTimer(ReplayAltTap, 0)
 }
 
 
@@ -405,20 +429,25 @@ FindHighlight(&method) {
             continue
         }
         behind := (w != hActive)
-        colour := ["Highlight colour", () => MatchFromColour(w)]
-        uiaSel := ["UI Automation selection", () => SelectionFromUIA(w, behind)]
-        ia2Sel := ["IAccessible2 selection", () => SelectionFromIA2(w)]
+        colour := "Highlight colour", uiaSel := "UI Automation selection"
+        ia2Sel := "IAccessible2 selection"
         attempts := isBrowser ? [colour, uiaSel, ia2Sel] : [uiaSel, ia2Sel, colour]
-        for a in attempts {
+        for name in attempts {
             r := 0, t0 := A_TickCount
-            try r := a[2]()
-            catch as e
-                Dbg("  " a[1] ": error: " e.Message)
+            try {
+                switch name {
+                    case colour: r := MatchFromColour(w)
+                    case uiaSel: r := SelectionFromUIA(w, behind)
+                    case ia2Sel: r := SelectionFromIA2(w)
+                }
+            } catch as e {
+                Dbg("  " name ": error: " e.Message " (line " e.Line ")")
+            }
             ok := r && Plausible(r, w)
-            Dbg("  " a[1] ": " (r ? "x=" r.x " y=" r.y " w=" r.w " h=" r.h (ok ? " - accepted" : " - rejected (off window)")
+            Dbg("  " name ": " (r ? "x=" r.x " y=" r.y " w=" r.w " h=" r.h (ok ? " - accepted" : " - rejected (off window)")
                                   : "nothing") "  (" (A_TickCount - t0) " ms)")
             if ok {
-                method := a[1] (behind ? " (in the window behind)" : "")
+                method := name (behind ? " (in the window behind)" : "")
                 return r
             }
         }
@@ -1160,6 +1189,7 @@ ValidateSettings() {
          , DisplayTime, FadeTime, RingOpacity, DoubleTapTime, MaxTapHold, ScanDelay
          , MatchColours, ColourTolerance, BrowserApps, NotFoundSound, BeepFrequency
          , BeepDuration, ShowMethodTooltip, AllowRunAsAdmin, AppResponseTimeout
+         , StopAltMenu, DebugLog
     fixes := []
     RingColour        := CheckColour(RingColour, "FF00FF", "RingColour", fixes)
     OutlineColour     := CheckColour(OutlineColour, "000000", "OutlineColour", fixes)
@@ -1180,6 +1210,8 @@ ValidateSettings() {
     BeepDuration      := CheckNumber(BeepDuration, 10, 5000, 200, "BeepDuration", fixes)
     StayUntilKeyPress := CheckBool(StayUntilKeyPress, true, "StayUntilKeyPress", fixes)
     ShowMethodTooltip := CheckBool(ShowMethodTooltip, false, "ShowMethodTooltip", fixes)
+    StopAltMenu       := CheckBool(StopAltMenu, true, "StopAltMenu", fixes)
+    DebugLog          := CheckBool(DebugLog, false, "DebugLog", fixes)
     AllowRunAsAdmin   := CheckBool(AllowRunAsAdmin, false, "AllowRunAsAdmin", fixes)
     AppResponseTimeout := CheckNumber(AppResponseTimeout, 200, 10000, 1000, "AppResponseTimeout", fixes)
     if (RingThickness >= MinRingRadius) {
