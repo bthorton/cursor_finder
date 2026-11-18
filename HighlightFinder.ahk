@@ -91,7 +91,6 @@ RingOpacity       := 240        ; 0 (invisible) to 255 (solid).
 WarningFontSize   := 24         ; Size of the "match is off-screen" warning text, in points.
 WarningTextColour := "000000"   ; Warning text colour (RRGGBB). Black ...
 WarningBackColour := "FFFF00"   ;   ... on bright yellow, inside a black border.
-WarningTime       := 8000       ; Milliseconds the warning stays, unless you press a key first.
 
 DoubleTapTime     := 400        ; Max milliseconds between the two right Shift taps.
 MaxTapHold        := 350        ; A right Shift press held longer than this isn't a "tap".
@@ -355,20 +354,18 @@ ShowWarning(text, ex, ey, wr) {
     } catch {
         try g.Destroy()
         ToolTip(text)                     ; fall back to an ordinary tooltip
-        SetTimer(() => ToolTip(), -WarningTime)
-        return
+        g := "tooltip"
     }
-    gWarn := g, gWarnShownAt := A_TickCount
-    SetTimer(HideWarning, -WarningTime)
+    gWarn := g, gWarnShownAt := A_TickCount   ; stays until the next key press
 }
 
 HideWarning() {
     global gWarn, gWarnShownAt := 0
-    SetTimer(HideWarning, 0)
-    if gWarn {
+    if (gWarn is String)                  ; the ordinary-tooltip fallback
+        ToolTip()
+    else if gWarn
         try gWarn.Destroy()
-        gWarn := 0
-    }
+    gWarn := 0
 }
 
 ; Shows the off-screen ring and warning as if a match were far off to the
@@ -1408,12 +1405,11 @@ ValidateSettings() {
          , DisplayTime, FadeTime, RingOpacity, DoubleTapTime, MaxTapHold
          , MatchColours, ColourTolerance, BrowserApps, NotFoundSound, BeepFrequency
          , BeepDuration, ShowMethodTooltip, AllowRunAsAdmin, AppResponseTimeout
-         , DebugLog, WarningFontSize, WarningTextColour, WarningBackColour, WarningTime
+         , DebugLog, WarningFontSize, WarningTextColour, WarningBackColour
     fixes := []
     WarningFontSize   := CheckNumber(WarningFontSize, 8, 72, 24, "WarningFontSize", fixes)
     WarningTextColour := CheckColour(WarningTextColour, "000000", "WarningTextColour", fixes)
     WarningBackColour := CheckColour(WarningBackColour, "FFFF00", "WarningBackColour", fixes)
-    WarningTime       := CheckNumber(WarningTime, 1000, 60000, 8000, "WarningTime", fixes)
     RingColour        := CheckColour(RingColour, "FFFF00", "RingColour", fixes)
     OutlineColour     := CheckColour(OutlineColour, "000000", "OutlineColour", fixes)
     OutlineWidth      := CheckNumber(OutlineWidth, 0, 50, 3, "OutlineWidth", fixes)
