@@ -5,26 +5,24 @@
 ;
 ;  WHAT IT DOES
 ;    After searching with Find (Ctrl+F) in a web browser or LibreOffice Writer,
-;    double-tap either Alt key. A ring appears around the current match (the
-;    one Find moved to, not the other highlighted matches). It starts large,
-;    shrinks onto the match, and fades when you press a key. If no current
-;    match can be found you hear the Windows "Exclamation" sound.
+;    double-tap the RIGHT Shift key. A ring appears around the current match
+;    (the one Find moved to, not the other highlighted matches). It starts
+;    large, shrinks onto the match, and fades when you press a key. If no
+;    current match can be found you hear the Windows "Exclamation" sound.
 ;
 ;    The ring is click-through, never takes focus and never blocks typing,
 ;    so you can keep pressing Enter / F3 to step through the matches.
 ;
-;    Tapping Alt normally opens the menu bar, so the first tap may flash the
-;    menu bar open and the second tap closes it again. The script waits a
-;    moment (ScanDelay) for the window to settle before it looks.
+;    (The LEFT Shift key is used by CaretFinder.ahk to find the text cursor.)
 ;
 ;  SECURITY / PERMISSIONS
 ;    * Needs NO administrator rights, to install or to run. Start it normally.
 ;    * If it finds it has been started as administrator anyway, it asks whether
 ;      to carry on and closes if you say No (see AllowRunAsAdmin in SETTINGS).
 ;    * It only looks at the screen and the selected text's position while you
-;      double-tap Alt. It does not record, store or send anything and it makes
-;      no network connections. (It only writes to the clipboard if you choose
-;      "Show colour under mouse pointer" from its tray menu.)
+;      double-tap right Shift. It does not record, store or send anything and
+;      it makes no network connections. (It only writes to the clipboard if you
+;      choose "Show colour under mouse pointer" from its tray menu.)
 ;
 ;  HOW TO INSTALL / RUN AT STARTUP
 ;    Exactly as for CaretFinder.ahk (see the top of that file): AutoHotkey v2,
@@ -87,17 +85,8 @@ DisplayTime       := 800        ; Milliseconds the ring stays (only if StayUntil
 FadeTime          := 500        ; Milliseconds the fade-out takes. 0 = vanish instantly.
 RingOpacity       := 240        ; 0 (invisible) to 255 (solid).
 
-DoubleTapTime     := 400        ; Max milliseconds between the two Alt taps.
-MaxTapHold        := 350        ; An Alt press held longer than this isn't a "tap".
-ScanDelay         := 150        ; Milliseconds to wait after the second tap before looking,
-                                ;   so a menu bar opened by the first tap has closed again.
-StopAltMenu       := true       ; true  = a double-tap doesn't open/close the menu bar (which
-                                ;   can move focus, e.g. into LibreOffice's Find box).
-                                ;   A single Alt tap still opens the menu bar, just after a
-                                ;   DoubleTapTime pause. But if you tap Alt and then press a
-                                ;   letter within that pause (e.g. Alt, then F for File),
-                                ;   the letter is typed instead: hold Alt+F together instead.
-                                ; false = leave Alt exactly as Windows normally has it.
+DoubleTapTime     := 400        ; Max milliseconds between the two right Shift taps.
+MaxTapHold        := 350        ; A right Shift press held longer than this isn't a "tap".
 
 MatchColours      := ["FF9632", "38D878"]
                                 ; Colours browsers paint the CURRENT match, as RRGGBB:
@@ -152,7 +141,7 @@ IID_IAccessible2     := "{E89F726E-C4F4-4C19-BB19-B647D7FA8478}"
 IID_IAccessibleText  := "{24FD2FFB-3AAD-4A08-8335-A3AD89C0FB4B}"
 IID_UIA_TextPattern  := "{32EBA289-3583-42C9-9C59-3B6D9A1E9B6A}"
 
-global gTapLast := 0, gAltDownAt := 0, gTapSpoiled := false, gIH := 0
+global gTapLast := 0, gShiftDownAt := 0, gTapSpoiled := false, gIH := 0
 global gRings := [], gAnim := 0
 global gDocCache := Map()                 ; UIA document per window, for one search
 global gTargets := ParseColours(MatchColours)
@@ -180,7 +169,8 @@ return
 
 
 ;==============================================================================
-;  Double-tap Alt detection (watches keys without blocking or altering them)
+;  Double-tap RIGHT Shift detection (watches keys without blocking or altering
+;  them). The LEFT Shift key is left for CaretFinder.ahk.
 ;==============================================================================
 StartKeyWatcher(*) {
     global gIH
@@ -189,74 +179,57 @@ StartKeyWatcher(*) {
     gIH.OnKeyDown := WatchKeyDown
     gIH.OnKeyUp := WatchKeyUp
     gIH.OnEnd := (*) => SetTimer(StartKeyWatcher, -500)   ; restart if ever stopped
-    gIH.MinSendLevel := 1                 ; ignore the keys this script sends itself
     gIH.Start()
 }
 
-; A single Alt tap was held back (StopAltMenu): send it on now, as a normal tap.
-ReplayAltTap() {
-    global gTapLast := 0
-    Dbg("Single Alt tap - passing it on to open the menu bar")
-    Send("{LAlt}")
-}
-
-IsAltVK(vk) => (vk = 0x12 || vk = 0xA4 || vk = 0xA5)
+IsRightShift(sc) => (sc = 0x36)          ; scan code of the right Shift key
 
 WatchKeyDown(ih, vk, sc) {
-    global gTapLast, gAltDownAt, gTapSpoiled
+    global gTapLast, gShiftDownAt, gTapSpoiled
     ; Any key press starts the fade of a ring that is waiting for one.
     if (IsObject(gAnim) && !gAnim.fadeStart && A_TickCount - gAnim.start >= 150)
         gAnim.fadeStart := A_TickCount
-    if IsAltVK(vk) {
-        if !gAltDownAt {                  ; ignore key auto-repeat
-            gAltDownAt := A_TickCount
-            ; Ctrl/Shift/Win already held (e.g. AltGr = Ctrl+Alt) = not a tap
-            gTapSpoiled := GetKeyState("Ctrl") || GetKeyState("Shift")
+    if IsRightShift(sc) {
+        if !gShiftDownAt {                ; ignore key auto-repeat
+            gShiftDownAt := A_TickCount
+            ; Ctrl/Alt/Win already held (e.g. Ctrl+Shift to switch keyboard) = not a tap
+            gTapSpoiled := GetKeyState("Ctrl") || GetKeyState("Alt")
                         || GetKeyState("LWin") || GetKeyState("RWin")
-            ; An unused key "masks" Alt, so releasing it won't activate the menu bar.
-            if (StopAltMenu && !gTapSpoiled)
-                Send("{Blind}{vkE8}")
         }
-    } else {                              ; any other key = not a double-tap
-        if gTapLast
-            SetTimer(ReplayAltTap, 0)     ; that tap wasn't for the menu bar after all
+    } else {                              ; any other key (incl. left Shift) = not a double-tap
         gTapLast := 0
         gTapSpoiled := true
     }
 }
 
 WatchKeyUp(ih, vk, sc) {
-    global gTapLast, gAltDownAt, gTapSpoiled
-    if !IsAltVK(vk)
+    global gTapLast, gShiftDownAt, gTapSpoiled
+    if !IsRightShift(sc)
         return
-    held := gAltDownAt ? A_TickCount - gAltDownAt : 99999
+    held := gShiftDownAt ? A_TickCount - gShiftDownAt : 99999
     spoiled := gTapSpoiled
-    gAltDownAt := 0
-    if (spoiled || held > MaxTapHold) {   ; Alt+key shortcut, or Alt held down
-        Dbg("Alt released - not a tap (" (spoiled ? "another key was involved" : "held " held " ms") ")")
+    gShiftDownAt := 0
+    if (spoiled || held > MaxTapHold) {   ; Shift+letter, or Shift held down
+        Dbg("Right Shift released - not a tap (" (spoiled ? "another key was involved" : "held " held " ms") ")")
         gTapLast := 0
         return
     }
-    Dbg("Alt tap")
+    Dbg("Right Shift tap")
     if (gTapLast && A_TickCount - gTapLast <= DoubleTapTime) {
-        Dbg("Double-tap of Alt detected (" (A_TickCount - gTapLast) " ms apart)")
+        Dbg("Double-tap of right Shift detected (" (A_TickCount - gTapLast) " ms apart)")
         gTapLast := 0
-        SetTimer(ReplayAltTap, 0)         ; the first tap was part of this, not for the menu
         SetTimer(ShowHighlightRing, -1)   ; run outside the key callback
     } else {
         gTapLast := A_TickCount
-        if StopAltMenu
-            SetTimer(ReplayAltTap, -DoubleTapTime)
     }
 }
 
-; A mouse click between the taps cancels.
+; A mouse click between the taps (e.g. Shift+click selecting) cancels.
 ~*LButton::
 ~*RButton::
 ~*MButton::
 {
     global gTapLast := 0
-    SetTimer(ReplayAltTap, 0)
 }
 
 
@@ -266,8 +239,6 @@ WatchKeyUp(ih, vk, sc) {
 ShowHighlightRing() {
     global gDocCache
     HideRing()                            ; never let an old ring get in the way
-    if ScanDelay
-        Sleep(ScanDelay)
     method := ""
     gDocCache := Map()
     r := 0
@@ -1191,10 +1162,10 @@ HideRing() {
 ValidateSettings() {
     global RingColour, OutlineColour, OutlineWidth, RingThickness, RingShape
          , RingPadding, MinRingRadius, StartGrowth, ShrinkTime, StayUntilKeyPress
-         , DisplayTime, FadeTime, RingOpacity, DoubleTapTime, MaxTapHold, ScanDelay
+         , DisplayTime, FadeTime, RingOpacity, DoubleTapTime, MaxTapHold
          , MatchColours, ColourTolerance, BrowserApps, NotFoundSound, BeepFrequency
          , BeepDuration, ShowMethodTooltip, AllowRunAsAdmin, AppResponseTimeout
-         , StopAltMenu, DebugLog
+         , DebugLog
     fixes := []
     RingColour        := CheckColour(RingColour, "FF00FF", "RingColour", fixes)
     OutlineColour     := CheckColour(OutlineColour, "000000", "OutlineColour", fixes)
@@ -1209,13 +1180,11 @@ ValidateSettings() {
     RingOpacity       := CheckNumber(RingOpacity, 1, 255, 240, "RingOpacity", fixes)
     DoubleTapTime     := CheckNumber(DoubleTapTime, 100, 2000, 400, "DoubleTapTime", fixes)
     MaxTapHold        := CheckNumber(MaxTapHold, 50, 2000, 350, "MaxTapHold", fixes)
-    ScanDelay         := CheckNumber(ScanDelay, 0, 2000, 150, "ScanDelay", fixes)
     ColourTolerance   := CheckNumber(ColourTolerance, 0, 120, 24, "ColourTolerance", fixes)
     BeepFrequency     := CheckNumber(BeepFrequency, 37, 32767, 800, "BeepFrequency", fixes)
     BeepDuration      := CheckNumber(BeepDuration, 10, 5000, 200, "BeepDuration", fixes)
     StayUntilKeyPress := CheckBool(StayUntilKeyPress, true, "StayUntilKeyPress", fixes)
     ShowMethodTooltip := CheckBool(ShowMethodTooltip, false, "ShowMethodTooltip", fixes)
-    StopAltMenu       := CheckBool(StopAltMenu, true, "StopAltMenu", fixes)
     DebugLog          := CheckBool(DebugLog, false, "DebugLog", fixes)
     AllowRunAsAdmin   := CheckBool(AllowRunAsAdmin, false, "AllowRunAsAdmin", fixes)
     AppResponseTimeout := CheckNumber(AppResponseTimeout, 200, 10000, 1000, "AppResponseTimeout", fixes)

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Caret Finder Manual</title>
-<meta name="description" content="How to download, install, configure and use Caret Finder, a tool that circles the text cursor when you double-tap Shift.">
+<meta name="description" content="How to download, install, configure and use Caret Finder, a tool that circles the text cursor when you double-tap the left Shift key.">
 <style>
   :root {
     --bg: #ffffff;
@@ -173,7 +173,7 @@
 <main id="content">
 
 <h1>Caret Finder</h1>
-<p class="subtitle">Double-tap <kbd>Shift</kbd> to circle the text cursor, like "Find My Mouse" but for where you're typing.</p>
+<p class="subtitle">Double-tap the left <kbd>Shift</kbd> key to circle the text cursor, like "Find My Mouse" but for where you're typing.</p>
 <p class="byline">By Ben Horton &middot; <time datetime="2026-11-11">11 November 2026</time></p>
 
 <div class="note" role="note" aria-label="Disclaimer">
@@ -196,7 +196,7 @@
 
 <!-- ===================================================================== -->
 <h2 id="what">1. What it does</h2>
-<p>When you double-tap either <kbd>Shift</kbd> key, Caret Finder draws a bright ring around the text cursor (the "caret") in the document you're typing in.</p>
+<p>When you double-tap the left <kbd>Shift</kbd> key, Caret Finder draws a bright ring around the text cursor (the "caret") in the document you're typing in.</p>
 <ul>
   <li>The ring starts large and shrinks onto the cursor. Movement is easier to catch with side vision.</li>
   <li>It stays on screen until you press any key, then fades away. That key still types normally.</li>
@@ -293,7 +293,7 @@
 <h2 id="use">4. How to use it</h2>
 <ol>
   <li>Click into a document, web page form, or anywhere you type, so the text cursor is there.</li>
-  <li><strong>Tap <kbd>Shift</kbd> twice quickly.</strong> Either Shift key works.</li>
+  <li><strong>Tap the left <kbd>Shift</kbd> key twice quickly.</strong> The right Shift key is left free for Highlight Finder, which circles the current search match.</li>
   <li>A ring shrinks onto the text cursor and stays there.</li>
   <li><strong>Press any key</strong> to make the ring fade away. You can simply carry on typing.</li>
 </ol>
@@ -361,7 +361,7 @@
   <thead><tr><th scope="col">Setting</th><th scope="col">Default</th><th scope="col">Allowed</th><th scope="col">What it does</th></tr></thead>
   <tbody>
     <tr><td><code>DoubleTapTime</code></td><td><code>400</code></td><td>100–2000 ms</td><td>Longest gap allowed between the two taps. Increase it if double-taps are often missed.</td></tr>
-    <tr><td><code>MaxTapHold</code></td><td><code>350</code></td><td>50–2000 ms</td><td>A Shift press held longer than this isn't counted as a tap.</td></tr>
+    <tr><td><code>MaxTapHold</code></td><td><code>350</code></td><td>50–2000 ms</td><td>A left Shift press held longer than this isn't counted as a tap.</td></tr>
   </tbody>
 </table>
 </div>
@@ -413,7 +413,7 @@
     <tr><td><strong>Window Spy</strong></td><td>An AutoHotkey tool that shows details of the window under the mouse. It can tell you a program's file name for <code>SkipStandardMethodFor</code>; look for <code>ahk_exe</code>.</td></tr>
     <tr><td><strong>Reload Script</strong></td><td>Restarts Caret Finder. <strong>Use this after changing settings.</strong></td></tr>
     <tr><td><strong>Edit Script</strong></td><td>Opens <code>CaretFinder.ahk</code> in your text editor, so you can change the settings.</td></tr>
-    <tr><td><strong>Suspend Hotkeys</strong></td><td>Has <strong>no useful effect</strong> on Caret Finder. The Shift double-tap keeps working.</td></tr>
+    <tr><td><strong>Suspend Hotkeys</strong></td><td>Has <strong>no useful effect</strong> on Caret Finder. The left Shift double-tap keeps working.</td></tr>
     <tr><td><strong>Pause Script</strong></td><td><strong>Not recommended.</strong> The ring may appear late, after you unpause, or stay frozen on screen. Use <strong>Exit</strong> instead.</td></tr>
     <tr><td><strong>Exit</strong></td><td>Closes Caret Finder. <strong>Use this to turn it off.</strong> Start it again by double-clicking <code>CaretFinder.ahk</code>.</td></tr>
   </tbody>
@@ -455,7 +455,7 @@
 <h2 id="privacy">8. Privacy and security</h2>
 <ul>
   <li>Caret Finder only reads <strong>where</strong> the text cursor is. It doesn't record, store or send what you type.</li>
-  <li>It watches the keyboard only to notice the Shift double-tap and the key press that dismisses the ring. It doesn't collect text.</li>
+  <li>It watches the keyboard only to notice the left Shift double-tap and the key press that dismisses the ring. It doesn't collect text.</li>
   <li>It makes no network connections and writes no files.</li>
   <li>It needs no administrator rights, to install or to run, and never asks for them.</li>
 </ul>

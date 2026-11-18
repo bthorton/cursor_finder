@@ -4,8 +4,8 @@
 ;==============================================================================
 ;
 ;  WHAT IT DOES
-;    Double-tap either Shift key and a ring appears around the text cursor in
-;    the document you are typing in. It starts large, shrinks onto the cursor
+;    Double-tap the LEFT Shift key and a ring appears around the text cursor
+;    in the document you are typing in. It starts large, shrinks onto the cursor
 ;    (movement is easy to catch with peripheral vision), stays briefly, then
 ;    fades when you press a key. If no text cursor can be found you hear the
 ;    Windows "Exclamation" sound (changeable in SETTINGS).
@@ -34,7 +34,8 @@
 ;    2. Put this file (CaretFinder.ahk) anywhere you like, e.g. Documents.
 ;    3. Double-click CaretFinder.ahk. A green "H" icon appears in the
 ;       system tray (bottom-right, by the clock). It is now running.
-;    4. Click in a document and tap Shift twice quickly.
+;    4. Click in a document and tap the left Shift key twice quickly.
+;       (The right Shift key is used by HighlightFinder.ahk.)
 ;
 ;  HOW TO MAKE IT RUN AT STARTUP
 ;    1. Right-click CaretFinder.ahk and choose "Create shortcut".
@@ -105,8 +106,8 @@ DisplayTime       := 800        ; Milliseconds the ring stays (only if StayUntil
 FadeTime          := 500        ; Milliseconds the fade-out takes. 0 = vanish instantly.
 RingOpacity       := 240        ; 0 (invisible) to 255 (solid).
 
-DoubleTapTime     := 400        ; Max milliseconds between the two Shift taps.
-MaxTapHold        := 350        ; A Shift press held longer than this isn't a "tap".
+DoubleTapTime     := 400        ; Max milliseconds between the two left Shift taps.
+MaxTapHold        := 350        ; A left Shift press held longer than this isn't a "tap".
 
 NotFoundSound     := A_WinDir "\Media\Windows Exclamation.wav"
                                 ; Sound played when no cursor is found. Any .wav file
@@ -186,7 +187,8 @@ return
 
 
 ;==============================================================================
-;  Double-tap Shift detection (watches keys without blocking or altering them)
+;  Double-tap LEFT Shift detection (watches keys without blocking or altering
+;  them). The RIGHT Shift key is left for HighlightFinder.ahk.
 ;==============================================================================
 StartKeyWatcher(*) {
     global gIH
@@ -198,19 +200,19 @@ StartKeyWatcher(*) {
     gIH.Start()
 }
 
-IsShiftVK(vk) => (vk = 0x10 || vk = 0xA0 || vk = 0xA1)
+IsLeftShift(sc) => (sc = 0x2A)           ; scan code of the left Shift key
 
 WatchKeyDown(ih, vk, sc) {
     global gTapLast, gShiftDownAt, gTapSpoiled
     ; Any key press starts the fade of a ring that is waiting for one.
     if (IsObject(gAnim) && !gAnim.fadeStart && A_TickCount - gAnim.start >= 150)
         gAnim.fadeStart := A_TickCount
-    if IsShiftVK(vk) {
+    if IsLeftShift(sc) {
         if !gShiftDownAt {                ; ignore key auto-repeat
             gShiftDownAt := A_TickCount
             gTapSpoiled := false
         }
-    } else {                              ; any other key = not a double-tap
+    } else {                              ; any other key (incl. right Shift) = not a double-tap
         gTapLast := 0
         gTapSpoiled := true
     }
@@ -218,7 +220,7 @@ WatchKeyDown(ih, vk, sc) {
 
 WatchKeyUp(ih, vk, sc) {
     global gTapLast, gShiftDownAt, gTapSpoiled
-    if !IsShiftVK(vk)
+    if !IsLeftShift(sc)
         return
     held := gShiftDownAt ? A_TickCount - gShiftDownAt : 99999
     spoiled := gTapSpoiled
