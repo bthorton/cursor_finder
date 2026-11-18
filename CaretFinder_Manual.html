@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Caret Finder Manual</title>
+<title>Caret Finder Manual (Beta)</title>
 <meta name="description" content="How to download, install, configure and use Caret Finder, a tool that circles the text cursor when you double-tap the left Shift key.">
 <style>
   :root {
@@ -142,6 +142,19 @@
   .note > :first-child, .warn > :first-child { margin-top: 0; }
   .note > :last-child, .warn > :last-child { margin-bottom: 0; }
 
+  .beta {
+    display: inline-block;
+    vertical-align: middle;
+    font-size: 0.45em;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.15em 0.5em;
+    border: 2px solid var(--warn-border);
+    background: var(--warn-bg);
+    border-radius: 4px;
+  }
+
   .table-wrap { overflow-x: auto; margin: 1rem 0; }
   table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
   th, td {
@@ -172,9 +185,13 @@
 <a class="skip" href="#content">Skip to the manual</a>
 <main id="content">
 
-<h1>Caret Finder</h1>
+<h1>Caret Finder <span class="beta">Beta</span></h1>
 <p class="subtitle">Double-tap the left <kbd>Shift</kbd> key to circle the text cursor, like "Find My Mouse" but for where you're typing.</p>
 <p class="byline">By Ben Horton &middot; <time datetime="2026-11-11">11 November 2026</time></p>
+
+<div class="warn" role="note" aria-label="Beta software">
+  <p><strong>This is beta software.</strong> Caret Finder is still being tested and may not find the cursor in every program. It has been tested in Firefox and WordPad. Testing in LibreOffice Writer and other programs is still in progress. Settings and behaviour may change between versions.<!-- Please report problems on the <a href="https://github.com/bthorton/cursor_finder/issues">GitHub issues page</a>. --></p>
+</div>
 
 <div class="note" role="note" aria-label="Disclaimer">
   <p><strong>Disclaimer:</strong> Caret Finder is provided free of charge, "as is", without warranty of any kind, express or implied. That includes any warranty that it is fit for a particular purpose or free of errors. You use it at your own risk. The author accepts no liability for any loss or damage arising from its use.</p>
