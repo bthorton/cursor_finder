@@ -1,6 +1,6 @@
 ;==============================================================================
 ;  BTH 18/Nov/26 I asked Claude to write this as a companion to CaretFinder.ahk
-;  HighlightFinder.ahk  -  ring the CURRENT search match (Find / Ctrl+F)
+;  Highlight_finder.ahk  -  ring the CURRENT search match (Find / Ctrl+F)
 ;==============================================================================
 ;
 ;  WHAT IT DOES
@@ -28,7 +28,7 @@
 ;
 ;  HOW TO INSTALL / RUN AT STARTUP
 ;    Exactly as for CaretFinder.ahk (see the top of that file): AutoHotkey v2,
-;    double-click HighlightFinder.ahk, and put a shortcut to it in your
+;    double-click Highlight_finder.ahk, and put a shortcut to it in your
 ;    shell:startup folder if you want it to start when you sign in. The two
 ;    scripts are independent; run either or both.
 ;
@@ -120,7 +120,7 @@ BeepDuration      := 200        ;   pitch in Hz and length in milliseconds.
 ShowMethodTooltip := false      ; true = show which method found the match.
 DebugLog          := true       ; true = write what happens on each double-tap to LogFile
                                 ;   (tray menu > "Open the debug log"). Normally false.
-LogFile           := A_Temp "\HighlightFinder_log.txt"
+LogFile           := A_Temp "\Highlight_finder_log.txt"
 
 AllowRunAsAdmin   := false      ; false = if started as administrator, ask whether to
                                 ;   carry on and close if you say No. Leave false.
@@ -1241,7 +1241,7 @@ ValidateSettings() {
         fixes.Push("NotFoundSound must be a file name in quotes; using the simple beep")
     }
     if fixes.Length {
-        msg := "Some settings in HighlightFinder.ahk were not valid, so safe values are being used:`n`n"
+        msg := "Some settings in Highlight_finder.ahk were not valid, so safe values are being used:`n`n"
         for f in fixes
             msg .= "  - " f "`n"
         MsgBox(msg, "Highlight Finder", "Icon! T60")
