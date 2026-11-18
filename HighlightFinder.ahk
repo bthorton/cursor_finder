@@ -110,7 +110,7 @@ BeepFrequency     := 800        ; Simple beep (used if the sound file is missing
 BeepDuration      := 200        ;   pitch in Hz and length in milliseconds.
 
 ShowMethodTooltip := false      ; true = show which method found the match.
-DebugLog          := false      ; true = write what happens on each double-tap to LogFile
+DebugLog          := true       ; true = write what happens on each double-tap to LogFile
                                 ;   (tray menu > "Open the debug log"). Normally false.
 LogFile           := A_Temp "\HighlightFinder_log.txt"
 
@@ -434,6 +434,13 @@ FindHighlight(&method) {
             if ok {
                 method := name (behind ? " (in the window behind)" : "")
                 return r
+            }
+            ; Firefox told us where its current match is, but it's off-screen
+            ; (e.g. hidden screen-reader text). The other methods would only take
+            ; longer to find the same thing, so stop here.
+            if (r && name = pageSel) {
+                Dbg("  Firefox's current match is off-screen - not trying the other methods")
+                return 0
             }
         }
     }
