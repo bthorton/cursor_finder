@@ -88,6 +88,11 @@ DisplayTime       := 800        ; Milliseconds the ring stays (only if StayUntil
 FadeTime          := 500        ; Milliseconds the fade-out takes. 0 = vanish instantly.
 RingOpacity       := 240        ; 0 (invisible) to 255 (solid).
 
+WarningFontSize   := 24         ; Size of the "match is off-screen" warning text, in points.
+WarningTextColour := "000000"   ; Warning text colour (RRGGBB). Black ...
+WarningBackColour := "FFFF00"   ;   ... on bright yellow, inside a black border.
+WarningTime       := 8000       ; Milliseconds the warning stays, unless you press a key first.
+
 DoubleTapTime     := 400        ; Max milliseconds between the two right Shift taps.
 MaxTapHold        := 350        ; A right Shift press held longer than this isn't a "tap".
 
@@ -146,6 +151,7 @@ IID_UIA_TextPattern  := "{32EBA289-3583-42C9-9C59-3B6D9A1E9B6A}"
 
 global gTapLast := 0, gShiftDownAt := 0, gTapSpoiled := false, gIH := 0
 global gRings := [], gAnim := 0
+global gWarn := 0, gWarnShownAt := 0      ; the big "off-screen" warning box
 global gDocCache := Map()                 ; UIA document per window, for one search
 global gTargets := ParseColours(MatchColours)
 
@@ -158,6 +164,7 @@ if FileExist(A_ScriptDir "\HighlightFinder.ico")
 A_IconTip := "HF"
 A_TrayMenu.Add()
 A_TrayMenu.Add("Test ring at mouse pointer", (*) => TestRing())
+A_TrayMenu.Add("Test off-screen warning", (*) => TestWarning())
 A_TrayMenu.Add("Show colour under mouse pointer (copies it)", ShowColourUnderMouse)
 A_TrayMenu.Add("Show which method found the match", ToggleMethodTip)
 if ShowMethodTooltip
@@ -191,7 +198,10 @@ IsRightShift(vk, sc) => (sc = 0x136 || sc = 0x36 || vk = 0xA1)
 
 WatchKeyDown(ih, vk, sc) {
     global gTapLast, gShiftDownAt, gTapSpoiled
-    ; Any key press starts the fade of a ring that is waiting for one.
+    ; Any key press hides the warning box, and starts the fade of a ring that
+    ; is waiting for one.
+    if (gWarnShownAt && A_TickCount - gWarnShownAt >= 300)
+        SetTimer(HideWarning, -1)
     if (IsObject(gAnim) && !gAnim.fadeStart && A_TickCount - gAnim.start >= 150)
         gAnim.fadeStart := A_TickCount
     if IsRightShift(vk, sc) {
@@ -244,6 +254,7 @@ WatchKeyUp(ih, vk, sc) {
 ShowHighlightRing() {
     global gDocCache
     HideRing()                            ; never let an old ring get in the way
+    HideWarning()
     method := ""
     gDocCache := Map()
     r := 0
@@ -310,11 +321,65 @@ ShowOffscreenMatch(r) {
         where .= (A_Index > 1 ? " and " : " ") s
     if !ShowRingAt(ex, ey, RingRadius, RingRadius)
         NotFoundAlert()
-    ; Keep the note inside the window, next to the ring.
-    tx := Max(wr.l + 10, Min(wr.r - 420, ex - 60))
-    ty := (ey + RingRadius + 70 < wr.b) ? ey + RingRadius + 10 : ey - RingRadius - 60
-    ShowTip("The current match is off-screen" where ", or hidden by the page.`n"
-          . "Press Enter in the Find bar to go to the next match.", tx, Max(wr.t + 10, ty), 6000)
+    ShowWarning("The current match is off-screen" where ",`nor hidden by the page.`n"
+              . "Press Enter in the Find bar`nto go to the next match.", ex, ey, wr)
+}
+
+; A big, high-contrast message box next to the ring at (ex, ey), kept inside
+; region wr. Like the ring, it is click-through and never takes focus.
+ShowWarning(text, ex, ey, wr) {
+    global gWarn, gWarnShownAt
+    HideWarning()
+    border := 5, pad := 18
+    try {
+        ; E0x80000 layered, E0x20 click-through, E0x08000000 never activate
+        g := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x80000 +E0x20 +E0x08000000")
+        g.BackColor := WarningBackColour
+        g.MarginX := border + pad, g.MarginY := border + pad - 4
+        g.SetFont("s" WarningFontSize " bold c" WarningTextColour, "Segoe UI")
+        g.AddText(, text)
+        g.Show("Hide AutoSize")
+        g.GetPos(, , &w, &h)
+        ; thick black frame round the edge
+        for f in [[0, 0, w, border], [0, h - border, w, border]
+                , [0, 0, border, h], [w - border, 0, border, h]]
+            g.AddProgress(Format("x{} y{} w{} h{} Background000000", f*))
+        ; Below the ring if there's room, otherwise above it; always inside wr.
+        x := Max(wr.l + 10, Min(wr.r - w - 10, ex - w / 2))
+        y := ey + RingRadius + 15
+        if (y + h > wr.b - 10)
+            y := ey - RingRadius - 15 - h
+        y := Max(wr.t + 10, Min(wr.b - h - 10, y))
+        g.Show(Format("NoActivate x{} y{}", Round(x), Round(y)))
+        WinSetTransparent(255, g)         ; a layered window must be given an opacity
+    } catch {
+        try g.Destroy()
+        ToolTip(text)                     ; fall back to an ordinary tooltip
+        SetTimer(() => ToolTip(), -WarningTime)
+        return
+    }
+    gWarn := g, gWarnShownAt := A_TickCount
+    SetTimer(HideWarning, -WarningTime)
+}
+
+HideWarning() {
+    global gWarn, gWarnShownAt := 0
+    SetTimer(HideWarning, 0)
+    if gWarn {
+        try gWarn.Destroy()
+        gWarn := 0
+    }
+}
+
+; Shows the off-screen ring and warning as if a match were far off to the
+; left of the window under the mouse pointer.
+TestWarning() {
+    x := "", y := "", h := 0
+    try MouseGetPos(&x, &y, &h)
+    if (!h || !IsSaneCoord(y))
+        return
+    ShowOffscreenMatch({x: -20000, y: y - 10, w: 40, h: 20
+                      , offscreenIn: DllCall("GetAncestor", "ptr", h, "uint", 2, "ptr")})
 }
 
 TestRing() {
@@ -1343,8 +1408,12 @@ ValidateSettings() {
          , DisplayTime, FadeTime, RingOpacity, DoubleTapTime, MaxTapHold
          , MatchColours, ColourTolerance, BrowserApps, NotFoundSound, BeepFrequency
          , BeepDuration, ShowMethodTooltip, AllowRunAsAdmin, AppResponseTimeout
-         , DebugLog
+         , DebugLog, WarningFontSize, WarningTextColour, WarningBackColour, WarningTime
     fixes := []
+    WarningFontSize   := CheckNumber(WarningFontSize, 8, 72, 24, "WarningFontSize", fixes)
+    WarningTextColour := CheckColour(WarningTextColour, "000000", "WarningTextColour", fixes)
+    WarningBackColour := CheckColour(WarningBackColour, "FFFF00", "WarningBackColour", fixes)
+    WarningTime       := CheckNumber(WarningTime, 1000, 60000, 8000, "WarningTime", fixes)
     RingColour        := CheckColour(RingColour, "FFFF00", "RingColour", fixes)
     OutlineColour     := CheckColour(OutlineColour, "000000", "OutlineColour", fixes)
     OutlineWidth      := CheckNumber(OutlineWidth, 0, 50, 3, "OutlineWidth", fixes)
