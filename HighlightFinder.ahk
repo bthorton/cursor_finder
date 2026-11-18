@@ -72,8 +72,8 @@
 Persistent
 
 ;============================== SETTINGS ======================================
-RingColour        := "FF00FF"   ; Ring colour as RRGGBB hex. Ideas: FF00FF magenta,
-                                ;   00FFFF cyan, FF0000 red, 0000FF blue
+RingColour        := "1A9A1A"   ; Ring colour as RRGGBB hex: a darker version of the icon's
+                                ;   green. Ideas: FF00FF magenta, 00FFFF cyan, FF0000 red
 OutlineColour     := "000000"   ; Thin contrasting edge around the ring. "FFFFFF" = white.
 OutlineWidth      := 3          ; Pixels of outline on each side of the ring. 0 = none.
 RingThickness     := 8          ; Thickness of the coloured ring, in pixels.
@@ -1298,7 +1298,7 @@ ValidateSettings() {
          , BeepDuration, ShowMethodTooltip, AllowRunAsAdmin, AppResponseTimeout
          , DebugLog
     fixes := []
-    RingColour        := CheckColour(RingColour, "FF00FF", "RingColour", fixes)
+    RingColour        := CheckColour(RingColour, "1A9A1A", "RingColour", fixes)
     OutlineColour     := CheckColour(OutlineColour, "000000", "OutlineColour", fixes)
     OutlineWidth      := CheckNumber(OutlineWidth, 0, 50, 3, "OutlineWidth", fixes)
     RingThickness     := CheckNumber(RingThickness, 1, 200, 8, "RingThickness", fixes)
