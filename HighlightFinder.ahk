@@ -77,9 +77,8 @@ RingColour        := "FF00FF"   ; Ring colour as RRGGBB hex. Ideas: FF00FF magen
 OutlineColour     := "000000"   ; Thin contrasting edge around the ring. "FFFFFF" = white.
 OutlineWidth      := 3          ; Pixels of outline on each side of the ring. 0 = none.
 RingThickness     := 8          ; Thickness of the coloured ring, in pixels.
-RingShape         := "circle"   ; "circle", or "oval" (hugs long phrases more closely).
-RingPadding       := 12         ; Gap in pixels between the highlighted text and the ring.
-MinRingRadius     := 45         ; The ring is never smaller than this, even round one letter.
+RingRadius        := 45         ; Radius of the ring, in pixels. It is always this size,
+                                ;   centred on the middle of the match, however long it is.
 StartGrowth       := 275        ; Ring starts this many pixels bigger, then shrinks onto
                                 ;   the match. 0 = no shrinking.
 ShrinkTime        := 300        ; Milliseconds the shrinking takes.
@@ -262,7 +261,7 @@ ShowHighlightRing() {
         return
     }
     if ShowMethodTooltip
-        ShowTip("Match found via: " method, r.x, r.y + r.h + MinRingRadius + 10)
+        ShowTip("Match found via: " method, r.x, r.y + r.h / 2 + RingRadius + 10)
 }
 
 NotFoundAlert() {
@@ -1183,18 +1182,12 @@ CreateRingWindows() {
     return true
 }
 
-; Works out a ring that surrounds rectangle r with RingPadding to spare.
+; A standard-size ring centred on the middle of rectangle r, however long
+; the highlighted text is.
 ShowRingAround(r) {
     if !IsRect(r)
         return false
-    cx := r.x + r.w / 2, cy := r.y + r.h / 2
-    if (RingShape = "oval") {                   ; an ellipse through the corners, scaled 1.41
-        rx := Max(MinRingRadius, Ceil(r.w * 0.7072) + RingPadding)
-        ry := Max(MinRingRadius, Ceil(r.h * 0.7072) + RingPadding)
-    } else {
-        rx := ry := Max(MinRingRadius, Ceil(Sqrt(r.w ** 2 + r.h ** 2) / 2) + RingPadding)
-    }
-    return ShowRingAt(cx, cy, Min(rx, 4000), Min(ry, 4000))
+    return ShowRingAt(r.x + r.w / 2, r.y + r.h / 2, RingRadius, RingRadius)
 }
 
 ShowRingAt(cx, cy, rx, ry) {
@@ -1298,8 +1291,8 @@ HideRing() {
 ;  Settings validation
 ;==============================================================================
 ValidateSettings() {
-    global RingColour, OutlineColour, OutlineWidth, RingThickness, RingShape
-         , RingPadding, MinRingRadius, StartGrowth, ShrinkTime, StayUntilKeyPress
+    global RingColour, OutlineColour, OutlineWidth, RingThickness
+         , RingRadius, StartGrowth, ShrinkTime, StayUntilKeyPress
          , DisplayTime, FadeTime, RingOpacity, DoubleTapTime, MaxTapHold
          , MatchColours, ColourTolerance, BrowserApps, NotFoundSound, BeepFrequency
          , BeepDuration, ShowMethodTooltip, AllowRunAsAdmin, AppResponseTimeout
@@ -1309,8 +1302,7 @@ ValidateSettings() {
     OutlineColour     := CheckColour(OutlineColour, "000000", "OutlineColour", fixes)
     OutlineWidth      := CheckNumber(OutlineWidth, 0, 50, 3, "OutlineWidth", fixes)
     RingThickness     := CheckNumber(RingThickness, 1, 200, 8, "RingThickness", fixes)
-    RingPadding       := CheckNumber(RingPadding, 0, 200, 12, "RingPadding", fixes)
-    MinRingRadius     := CheckNumber(MinRingRadius, 5, 1000, 45, "MinRingRadius", fixes)
+    RingRadius        := CheckNumber(RingRadius, 5, 1000, 45, "RingRadius", fixes)
     StartGrowth       := CheckNumber(StartGrowth, 0, 2000, 275, "StartGrowth", fixes)
     ShrinkTime        := CheckNumber(ShrinkTime, 0, 10000, 300, "ShrinkTime", fixes)
     DisplayTime       := CheckNumber(DisplayTime, 0, 600000, 800, "DisplayTime", fixes)
@@ -1326,13 +1318,9 @@ ValidateSettings() {
     DebugLog          := CheckBool(DebugLog, false, "DebugLog", fixes)
     AllowRunAsAdmin   := CheckBool(AllowRunAsAdmin, false, "AllowRunAsAdmin", fixes)
     AppResponseTimeout := CheckNumber(AppResponseTimeout, 200, 10000, 1000, "AppResponseTimeout", fixes)
-    if (RingThickness >= MinRingRadius) {
-        RingThickness := Max(1, MinRingRadius // 4)
-        fixes.Push("RingThickness must be smaller than MinRingRadius; using " RingThickness)
-    }
-    if (IsObject(RingShape) || !(RingShape = "circle" || RingShape = "oval")) {
-        fixes.Push("RingShape = " ShowValue(RingShape) ' must be "circle" or "oval"; using "circle"')
-        RingShape := "circle"
+    if (RingThickness >= RingRadius) {
+        RingThickness := Max(1, RingRadius // 4)
+        fixes.Push("RingThickness must be smaller than RingRadius; using " RingThickness)
     }
     if (MatchColours is Array) {
         good := []
