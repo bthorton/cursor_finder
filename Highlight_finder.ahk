@@ -118,7 +118,7 @@ BeepFrequency     := 800        ; Simple beep (used if the sound file is missing
 BeepDuration      := 200        ;   pitch in Hz and length in milliseconds.
 
 ShowMethodTooltip := false      ; true = show which method found the match.
-DebugLog          := true       ; true = write what happens on each double-tap to LogFile
+DebugLog          := false      ; true = write what happens on each double-tap to LogFile
                                 ;   (tray menu > "Open the debug log"). Normally false.
 LogFile           := A_Temp "\Highlight_finder_log.txt"
 
